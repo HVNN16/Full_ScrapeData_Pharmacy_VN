@@ -1,0 +1,10 @@
+File pharmacy.js chịu trách nhiệm kết nối backend NodeJS với cơ sở dữ liệu PostGIS.
+Nó cung cấp 3 API chính:
+
+/api/pharmacies.geojson: trả về dữ liệu nhà thuốc dạng GeoJSON để hiển thị trên bản đồ React Leaflet
+
+/api/provinces: trả về danh sách tỉnh cho bộ lọc
+
+/api/heat: trả về danh sách tọa độ và điểm đánh giá để vẽ heatmap mật độ nhà thuốc
+
+Nhờ việc xuất GeoJSON trực tiếp từ PostGIS, hệ thống có thể hiển thị dữ liệu bản đồ chính xác và tối ưu, không cần xử lý thủ công.

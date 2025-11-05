@@ -1,0 +1,11 @@
+# SCRAPE DATA GOOGLE MAPS TỪ HIỆU THUỐC Ở VIỆT NAM
+# MÌNH SẼ HƯỚNG DẪN 1 TÝ VỀ CÁC THƯ MỤC DỰ ÁN TỔNG QUAN VỀ SCRAPEDATA GOOGLE MAPS TỪ HIỆU THUỐC Ở VIỆT NAM NHÉ !!!
+
+
+# scrape_data : thư mục có chức năng thực hiện việt scrape data từ google maps 
+# testimages : vì 1 số đữ liệu ảnh không tải được từ google maps nên mình sẽ dùng 1 tool khác để truy vấn và lấy ảnh về 1 lần nữa để lấp đầy khoảng trống =))
+# pharmacy-map : thư mục thực hiện giai đoạn cuối trực quan hóa dữ liệu lên bảng đồ và hiển thị bằng reactjs + leaflet - Nodejs - PostgreSQL
+
+
+
+# THANK YOU !!!!

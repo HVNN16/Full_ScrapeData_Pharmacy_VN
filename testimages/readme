@@ -1,0 +1,108 @@
+; Start : 
+python fetch_gmaps_photos_selenium.py --limit 200 --batch-size 10 --sleep 8.0 --captcha-skip
+# Hướng dẫn Backfill ảnh Google Maps bằng Selenium
+
+Tài liệu này giải thích chi tiết cách sử dụng script `fetch_gmaps_photos_selenium.py`, script sẽ mở từng trang Google Maps theo `place_id`, lấy đường dẫn ảnh và cập nhật vào cột `image` trong bảng PostgreSQL `grocery_stores`.
+
+> ⚠️ **Lưu ý**: Việc cào dữ liệu từ Google Maps có thể vi phạm Điều khoản dịch vụ của Google. Chỉ nên dùng cho mục đích hợp pháp, chạy chậm và kiểm soát tốt, tránh bị CAPTCHA hoặc block.
+
+---
+
+## 1. Tổng quan
+
+* **Mục tiêu**: Hoàn thiện dữ liệu ảnh cho các cửa hàng trong bảng `grocery_stores`.
+* **Đầu vào**: `place_id` của từng cửa hàng.
+* **Kết quả**: Cập nhật cột `image` bằng URL ảnh (ưu tiên lấy từ thẻ `og:image` hoặc `lh3.googleusercontent.com`).
+* **Ưu điểm**: Không tốn phí API (không gọi Google Places API).
+
+---
+
+## 2. Yêu cầu cài đặt
+
+* Python 3.9+
+* Google Chrome/Chromium đã cài đặt
+* Thư viện Python:
+
+```bash
+pip install undetected-chromedriver selenium psycopg2-binary python-dotenv
+```
+
+* PostgreSQL đang chạy và truy cập được
+
+---
+
+## 3. Cấu hình (.env)
+
+Tạo file `.env` trong cùng thư mục với script. Có 2 cách:
+
+**Cách A – Dùng PG**\* (khuyên dùng):
+
+```env
+PGHOST=localhost
+PGPORT=5432
+PGDATABASE=gisdb
+PGUSER=postgres
+PGPASSWORD=12345
+
+# Selenium
+SELENIUM_HEADLESS=true
+SELENIUM_WINDOW=1200x900
+```
+
+**Cách B – Dùng DATABASE\_URL:**
+
+```env
+DATABASE_URL=postgresql://postgres:12345@localhost:5432/gisdb
+SELENIUM_HEADLESS=true
+SELENIUM_WINDOW=1200x900
+```
+
+> Script sẽ ưu tiên `DATABASE_URL` nếu biến này tồn tại.
+
+---
+
+## 4. Cách chạy
+
+Ví dụ chạy 200 bản ghi, mỗi batch 20 dòng, nghỉ 2 giây giữa các request:
+
+```bash
+python fetch_gmaps_photos_selenium.py --limit 200 --batch-size 20 --sleep 2.0
+```
+
+### Tham số hỗ trợ
+
+* `--limit`: số lượng bản ghi tối đa (0 = tất cả)
+* `--batch-size`: số dòng lấy mỗi batch
+* `--sleep`: thời gian nghỉ giữa các request (giây)
+* `--max-retries`: số lần thử lại khi lỗi (mặc định 2)
+
+---
+
+## 5. Điểm quan trọng trong code
+
+* **Kết nối DB**: `get_conn()` đọc config từ `.env`.
+* **Driver Selenium**: Dùng `undetected-chromedriver` để tránh bị phát hiện.
+* **Lấy ảnh**:
+
+  * Ưu tiên thẻ `<meta property="og:image">`
+  * Nếu không có, thử click ảnh header để mở viewer và quét ảnh từ `lh3.googleusercontent.com`
+* **Cập nhật DB**: `update_image()` thực hiện câu lệnh `UPDATE grocery_stores SET image = ...`
+* **Chống chặn**:
+
+  * Có `sleep` ngẫu nhiên để giống hành vi người thật
+  * Giới hạn batch và số lần retry
+
+---
+
+## 6. Lưu ý vận hành
+
+* Không chạy quá nhanh để tránh bị CAPTCHA
+* Nếu bị chặn nhiều, cân nhắc dùng proxy
+* Luôn backup DB trước khi chạy diện rộng
+* Nếu giao diện Google Maps thay đổi, cần chỉnh lại CSS selector trong code
+
+---
+
+## 7. Kết luận
+
+Script này giúp tự động điền ảnh Google Maps vào PostgreSQL mà không tốn phí API. Tuy nhiên, cần tuân thủ ToS của Google và sử dụng cẩn trọng.
