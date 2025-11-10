@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Backfill ảnh Google Maps bằng Selenium (không dùng API tính phí).
+Backfill ảnh Google Maps bằng Selenium.
 
 ⚠️ Lưu ý:
   - Cào dữ liệu từ Google Maps có thể vi phạm Điều khoản dịch vụ. Hãy dùng cẩn trọng.
