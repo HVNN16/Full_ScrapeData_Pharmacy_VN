@@ -5,8 +5,7 @@ import MapView from "./components/MapView";
 import PharmacyList from "./components/PharmacyList";
 import PROVINCE_DISTRICTS from "./data/provinceDistricts";
 import ProvinceStats from "./components/ProvinceStats";
-
-
+import ExportCSV from "./components/ExportCSV";
 
 export default function App() {
   const [provinces, setProvinces] = useState([]);
@@ -18,11 +17,11 @@ export default function App() {
   const [showStats, setShowStats] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
 
-  // ✅ Thêm state cho vị trí và bán kính
+  // 📍 vị trí + radius
   const [userLocation, setUserLocation] = useState(null);
   const [radiusKm, setRadiusKm] = useState(5);
 
-  // ✅ Chuẩn hóa tên tỉnh
+  // 🔣 chuẩn hóa tên tỉnh
   const normalizeProvinceName = (name) => {
     if (!name) return "";
     return name
@@ -34,22 +33,22 @@ export default function App() {
       .replace("Phố", "phố");
   };
 
-  // 🧭 Lấy danh sách tỉnh
+  // 📌 Load danh sách tỉnh
   useEffect(() => {
     fetchProvinces().then(setProvinces);
   }, []);
 
-  // 🔄 Khi chọn tỉnh → load danh sách huyện
+  // 📌 Khi chọn tỉnh → load danh sách huyện
   useEffect(() => {
     const normalized = normalizeProvinceName(province);
     const list = PROVINCE_DISTRICTS[normalized] || [];
     setDistricts(list);
-    setDistrict(""); // reset huyện khi đổi tỉnh
+    setDistrict("");
   }, [province]);
 
   return (
     <div style={{ display: "flex", height: "100vh" }}>
-      {/* === Sidebar === */}
+      {/* Sidebar */}
       <aside
         style={{
           width: "360px",
@@ -59,9 +58,9 @@ export default function App() {
           padding: "16px",
         }}
       >
-        <h2 style={{ color: "#007bff", marginBottom: "10px" }}>💊 Bản đồ nhà thuốc</h2>
+        <h2 style={{ color: "#007bff", marginBottom: 10 }}>💊 Bản đồ nhà thuốc</h2>
 
-        {/* --- Bộ lọc --- */}
+        {/* Bộ lọc Tỉnh */}
         <label>Tỉnh / Thành phố</label>
         <select
           value={province}
@@ -76,6 +75,7 @@ export default function App() {
           ))}
         </select>
 
+        {/* Bộ lọc Huyện */}
         <label>Địa chỉ hành chính cấp 2</label>
         <select
           value={district}
@@ -91,6 +91,7 @@ export default function App() {
           ))}
         </select>
 
+        {/* Rating */}
         <label>Rating tối thiểu</label>
         <input
           type="number"
@@ -99,7 +100,8 @@ export default function App() {
           placeholder="VD: 4.0"
           style={{ width: "100%", marginBottom: 15 }}
         />
-        {/* --- Nút HeatMap --- */}
+
+        {/* Heatmap */}
         <button
           onClick={() => setShowHeatmap(!showHeatmap)}
           style={{
@@ -116,7 +118,25 @@ export default function App() {
           {showHeatmap ? "🧊 Tắt lớp nhiệt" : "🔥 Bật lớp nhiệt"}
         </button>
 
-        {/* --- Nút chuyển tab --- */}
+        {/* Xuất CSV */}
+        {/* <button
+          onClick={() => window.dispatchEvent(new Event("exportCSV"))}
+          style={{
+            background: "#f59e0b",
+            color: "white",
+            border: "none",
+            padding: "8px 12px",
+            borderRadius: "6px",
+            marginBottom: 15,
+            width: "100%",
+            cursor: "pointer",
+            fontWeight: 500,
+          }}
+        >
+          📄 Xuất CSV
+        </button> */}
+
+        {/* Chuyển tab */}
         <button
           onClick={() => setShowStats(!showStats)}
           style={{
@@ -134,7 +154,7 @@ export default function App() {
           {showStats ? "🔙 Trở lại danh sách" : "📊 Xem thống kê theo tỉnh"}
         </button>
 
-        {/* --- Hiển thị danh sách hoặc thống kê --- */}
+        {/* Hiển thị danh sách hoặc thống kê */}
         {showStats ? (
           <ProvinceStats province={province} />
         ) : (
@@ -142,7 +162,7 @@ export default function App() {
             province={province}
             district={district}
             ratingMin={ratingMin}
-            userLocation={userLocation}  
+            userLocation={userLocation}
             setSelectedPharmacy={setSelectedPharmacy}
             setUserLocation={setUserLocation}
             setRadiusKm={setRadiusKm}
@@ -150,7 +170,7 @@ export default function App() {
         )}
       </aside>
 
-      {/* === Bản đồ === */}
+      {/* Bản đồ */}
       <main style={{ flex: 1 }}>
         <MapView
           province={province}
@@ -161,6 +181,9 @@ export default function App() {
           radiusKm={radiusKm}
           showHeatmap={showHeatmap}
         />
+
+        {/* Lắng nghe sự kiện xuất CSV */}
+        <ExportCSV province={province} district={district} />
       </main>
     </div>
   );
