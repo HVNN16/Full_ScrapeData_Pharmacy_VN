@@ -1,0 +1,163 @@
+/* ===========================
+   HEADER
+=========================== */
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 22px;
+  background: #2d3436;
+  color: white;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.admin-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.admin-header-actions .btn {
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: white;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.btn-green {
+  background: #00b894;
+}
+
+.btn-green:hover {
+  background: #019670;
+}
+
+/* ===========================
+   TABLE + FILTER
+=========================== */
+.admin-content {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 7px #ccc;
+}
+
+.filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.filters select,
+.filters input {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+/* TABLE */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.admin-table th {
+  background: #0984e3;
+  color: white;
+  padding: 10px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.admin-table td {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.btn-edit,
+.btn-delete {
+  padding: 6px;
+  margin-right: 5px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.btn-edit {
+  background: #fdcb6e;
+}
+
+.btn-delete {
+  background: #d63031;
+  color: white;
+}
+
+.btn-delete:hover {
+  background: #c0392b;
+}
+
+/* ===========================
+   PAGINATION
+=========================== */
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 15px;
+  gap: 10px;
+}
+
+.pagination button {
+  padding: 8px 12px;
+  background: #0984e3;
+  border: none;
+  color: white;
+  border-radius: 6px;
+}
+
+.pagination button:disabled {
+  background: #ccc;
+}
+
+/* ===========================
+   MODAL
+=========================== */
+.modal-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #0007;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-box {
+  background: white;
+  padding: 20px;
+  width: 420px;
+  border-radius: 12px;
+  box-shadow: 0 3px 10px #555;
+}
+
+.modal-box input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.btn-blue {
+  background: #0984e3;
+  color: white;
+  margin-right: 10px;
+}
+
+.btn-red {
+  background: #d63031;
+  color: white;
+}
