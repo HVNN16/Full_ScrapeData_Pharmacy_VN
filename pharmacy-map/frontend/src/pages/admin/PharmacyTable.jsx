@@ -8,21 +8,19 @@ export default function PharmacyTable({ onEdit }) {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
-  // FILTERS
   const [province, setProvince] = useState("");
   const [district, setDistrict] = useState("");
   const [search, setSearch] = useState("");
 
   const perPage = 20;
 
-  // Load data
   const load = async () => {
     const res = await api.get("/admin/pharmacies", {
       params: { page, perPage, province, district, search },
     });
 
-    setList(res.data.rows);
-    setTotal(res.data.total);
+    setList(Array.isArray(res.data.rows) ? res.data.rows : []);
+    setTotal(res.data.total || 0);
   };
 
   useEffect(() => {
@@ -30,13 +28,17 @@ export default function PharmacyTable({ onEdit }) {
   }, [page, province, district, search]);
 
   const remove = async (id) => {
+    if (!id || isNaN(Number(id))) {
+      alert("❌ ID không hợp lệ, không thể xoá!");
+      return;
+    }
+
     if (window.confirm("Bạn có chắc muốn xoá?")) {
       await api.delete(`/admin/pharmacies/${id}`);
       load();
     }
   };
 
-  // 🔥 Lấy danh sách huyện theo tỉnh được chọn
   const getDistricts = () => {
     if (!province) return [];
     return PROVINCE_DISTRICTS[province] || [];
@@ -46,19 +48,28 @@ export default function PharmacyTable({ onEdit }) {
 
   return (
     <div className="admin-content">
-      {/* 🔍 Bộ lọc */}
       <div className="filters">
-        <select value={province} onChange={(e) => { setProvince(e.target.value); setDistrict(""); }}>
+        <select
+          value={province}
+          onChange={(e) => {
+            setProvince(e.target.value);
+            setDistrict("");
+          }}
+        >
           <option value="">-- Tất cả tỉnh --</option>
           {Object.keys(PROVINCE_DISTRICTS).map((p) => (
-            <option key={p} value={p}>{p}</option>
+            <option key={p} value={p}>
+              {p}
+            </option>
           ))}
         </select>
 
         <select value={district} onChange={(e) => setDistrict(e.target.value)}>
           <option value="">-- Tất cả huyện --</option>
           {getDistricts().map((d) => (
-            <option key={d} value={d}>{d}</option>
+            <option key={d} value={d}>
+              {d}
+            </option>
           ))}
         </select>
 
@@ -70,7 +81,6 @@ export default function PharmacyTable({ onEdit }) {
         />
       </div>
 
-      {/* Bảng */}
       <table className="admin-table">
         <thead>
           <tr>
@@ -85,7 +95,7 @@ export default function PharmacyTable({ onEdit }) {
         </thead>
 
         <tbody>
-          {list.map((p) => (
+          {(list || []).map((p) => (
             <tr key={p.id}>
               <td>{p.id}</td>
               <td>{p.name}</td>
@@ -94,23 +104,34 @@ export default function PharmacyTable({ onEdit }) {
               <td>{p.district}</td>
               <td>{p.rating}</td>
               <td>
-                <button className="btn-edit" onClick={() => onEdit(p)}>✏</button>
-                <button className="btn-delete" onClick={() => remove(p.id)}>🗑</button>
+                <button className="btn-edit" onClick={() => onEdit(p)}>
+                  ✏
+                </button>
+                <button
+                  className="btn-delete"
+                  onClick={() => remove(p.id)}
+                >
+                  🗑
+                </button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      {/* 🔄 PHÂN TRANG */}
       <div className="pagination">
         <button disabled={page === 1} onClick={() => setPage(page - 1)}>
           ⬅ Prev
         </button>
 
-        <span>Trang {page} / {totalPages}</span>
+        <span>
+          Trang {page} / {totalPages}
+        </span>
 
-        <button disabled={page === totalPages} onClick={() => setPage(page + 1)}>
+        <button
+          disabled={page === totalPages}
+          onClick={() => setPage(page + 1)}
+        >
           Next ➡
         </button>
       </div>

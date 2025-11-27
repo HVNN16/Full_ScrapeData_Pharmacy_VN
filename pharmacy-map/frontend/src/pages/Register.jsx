@@ -86,7 +86,7 @@ export default function Register() {
           placeholder="Họ và tên"
           onChange={(e) => setFullname(e.target.value)}
           style={{
-            width: "100%",
+            width: "90%",
             padding: "13px",
             borderRadius: 10,
             border: "1px solid rgba(0,0,0,0.15)",
@@ -100,7 +100,7 @@ export default function Register() {
           placeholder="Email"
           onChange={(e) => setEmail(e.target.value)}
           style={{
-            width: "100%",
+            width: "90%",
             padding: "13px",
             borderRadius: 10,
             border: "1px solid rgba(0,0,0,0.15)",
@@ -115,7 +115,7 @@ export default function Register() {
           placeholder="Mật khẩu"
           onChange={(e) => setPassword(e.target.value)}
           style={{
-            width: "100%",
+            width: "90%",
             padding: "13px",
             borderRadius: 10,
             border: "1px solid rgba(0,0,0,0.15)",
@@ -128,7 +128,7 @@ export default function Register() {
         <button
           onClick={handleRegister}
           style={{
-            width: "100%",
+            width: "90%",
             padding: "13px",
             background: "linear-gradient(135deg, #27ae60, #1e874b)",
             color: "white",

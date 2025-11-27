@@ -102,7 +102,7 @@ export default function Login() {
           placeholder="Email"
           onChange={(e) => setEmail(e.target.value)}
           style={{
-            width: "100%",
+            width: "90%",
             marginBottom: 12,
             padding: "13px",
             borderRadius: 10,
@@ -117,7 +117,7 @@ export default function Login() {
           placeholder="Mật khẩu"
           onChange={(e) => setPassword(e.target.value)}
           style={{
-            width: "100%",
+            width: "90%",
             marginBottom: 15,
             padding: "13px",
             borderRadius: 10,
