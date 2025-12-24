@@ -1,7 +1,4 @@
-// src/data/districtCenters.js
-// ⚠️ Bạn sẽ bổ sung dần các huyện còn thiếu bằng log từ MapView (search: "CENTER_SUGGEST")
 const districtCenters = {
-  // ===== HÀ NỘI (mẫu) =====
   "Quận Ba Đình": [21.0356, 105.8387],
   "Quận Hoàn Kiếm": [21.0288, 105.8522],
   "Quận Đống Đa": [21.0133, 105.8327],
@@ -23,8 +20,6 @@ const districtCenters = {
   "Huyện Phú Xuyên": [20.7395, 105.9111],
   "Huyện Ba Vì": [21.1469, 105.3879],
   "Thị xã Sơn Tây": [21.1400, 105.5040],
-
-  // ===== TP. HỒ CHÍ MINH (mẫu) =====
   "Quận 1": [10.7757, 106.7004],
   "Quận 3": [10.7852, 106.6880],
   "Quận 5": [10.7543, 106.6631],
@@ -44,8 +39,6 @@ const districtCenters = {
   "Huyện Nhà Bè": [10.6953, 106.7404],
   "Huyện Củ Chi": [11.0062, 106.5007],
   "Huyện Cần Giờ": [10.4128, 106.9556],
-
-  // ===== ĐÀ NẴNG (mẫu) =====
   "Quận Hải Châu": [16.0614, 108.2247],
   "Quận Thanh Khê": [16.0660, 108.1900],
   "Quận Sơn Trà": [16.0930, 108.2417],

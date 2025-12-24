@@ -13,7 +13,7 @@ export default function PharmacyList({
   const [filtered, setFiltered] = useState([]);
   const [search, setSearch] = useState("");
   const [radius, setRadius] = useState(5); // km
-  const [sortByDistance, setSortByDistance] = useState(true); // ✅ auto sắp xếp
+  const [sortByDistance, setSortByDistance] = useState(true); 
 
   // 🔄 Lấy dữ liệu từ backend
   useEffect(() => {

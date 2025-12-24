@@ -8,7 +8,7 @@ import provinceCenters from "../data/provinceCenters";
 import districtCenters from "../data/districtCenters";
 import L from "leaflet";
 import RouteToPharmacy from "./RouteToPharmacy";
-import HeatLayer from "./HeatLayer"; // ✅ thêm vào đây
+import HeatLayer from "./HeatLayer";
 
 
 // === Utils ===
@@ -127,7 +127,7 @@ export default function MapView({
   selectedPharmacy,
   userLocation,
   radiusKm,
-  showHeatmap, // ✅ thêm prop để bật/tắt lớp nhiệt
+  showHeatmap, 
 }) {
   const [features, setFeatures] = useState(null);
   const [loading, setLoading] = useState(false);

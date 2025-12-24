@@ -20,6 +20,9 @@ export default function HomePage() {
   const [userLocation, setUserLocation] = useState(null);
   const [radiusKm, setRadiusKm] = useState(5);
 
+  // NEW: Toggle menu cho mobile
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const normalizeProvinceName = (name) => {
     if (!name) return "";
     return name
@@ -43,112 +46,154 @@ export default function HomePage() {
   }, [province]);
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div style={{ display: "flex", height: "100vh", position: "relative" }}>
+
+      {/* Nút mở menu (chỉ hiện trên mobile) */}
+      <button
+        className="toggle-btn"
+        onClick={() => setMenuOpen(true)}
+        style={{
+          display: "none",
+          position: "absolute",
+          left: 10,
+          top: 10,
+          zIndex: 999,
+          padding: "8px 12px",
+          background: "#007bff",
+          color: "#fff",
+          border: "none",
+          borderRadius: "6px",
+          fontWeight: 600,
+        }}
+      >
+        ☰ Menu
+      </button>
+
+      {/* Sidebar */}
       <aside
+        className={`sidebar ${menuOpen ? "show" : ""}`}
         style={{
           width: "360px",
           background: "#fff",
           borderRight: "1px solid #eee",
           overflowY: "auto",
           padding: "16px",
+          zIndex: 1000,
         }}
       >
-        <h2 style={{ color: "#007bff", marginBottom: 10 }}>💊 Bản đồ nhà thuốc</h2>
-      {/* ==== LOGIN & REGISTER BUTTONS ==== */}
-<div style={{ marginBottom: 20 }}>
-  {!localStorage.getItem("token") ? (
-    <>
-      <button
-        onClick={() => (window.location.href = "/login")}
-        style={{
-          background: "#6c5ce7",
-          color: "white",
-          border: "none",
-          padding: "8px 12px",
-          borderRadius: "6px",
-          width: "100%",
-          cursor: "pointer",
-          fontWeight: 500,
-          marginBottom: 8,
-        }}
-      >
-        🔐 Đăng nhập
-      </button>
-
-      <button
-        onClick={() => (window.location.href = "/register")}
-        style={{
-          background: "#00b894",
-          color: "white",
-          border: "none",
-          padding: "8px 12px",
-          borderRadius: "6px",
-          width: "100%",
-          cursor: "pointer",
-          fontWeight: 500,
-        }}
-      >
-        📝 Đăng ký
-      </button>
-    </>
-  ) : (
-    <>
-      <div
-        style={{
-          padding: "8px",
-          background: "#eaeaea",
-          borderRadius: "6px",
-          marginBottom: "10px",
-          textAlign: "center",
-          fontWeight: 500,
-        }}
-      >
-        👤 Xin chào, {localStorage.getItem("fullname")}
-      </div>
-
-      {/* ⭐⭐⭐ Hiện nút Admin nếu role = admin ⭐⭐⭐ */}
-      {localStorage.getItem("role") === "admin" && (
+        {/* Nút đóng menu mobile */}
         <button
-          onClick={() => (window.location.href = "/admin")}
+          className="close-btn"
+          onClick={() => setMenuOpen(false)}
           style={{
-            background: "#0984e3",
-            color: "white",
-            border: "none",
-            padding: "8px 12px",
-            borderRadius: "6px",
-            width: "100%",
-            cursor: "pointer",
-            fontWeight: 500,
+            display: "none",
             marginBottom: 10,
+            background: "#d63031",
+            color: "#fff",
+            border: "none",
+            padding: "6px 10px",
+            borderRadius: "6px",
           }}
         >
-          🛠 Trang quản trị
+          ✖ Đóng
         </button>
-      )}
 
-      <button
-        onClick={() => {
-          localStorage.clear();
-          window.location.href = "/";
-        }}
-        style={{
-          background: "#d63031",
-          color: "white",
-          border: "none",
-          padding: "8px 12px",
-          borderRadius: "6px",
-          width: "100%",
-          cursor: "pointer",
-          fontWeight: 500,
-        }}
-      >
-        🚪 Đăng xuất
-      </button>
-    </>
-  )}
-</div>
-{/* ==== END AUTH BUTTONS ==== */}
+        <h2 style={{ color: "#007bff", marginBottom: 10 }}>💊 Bản đồ nhà thuốc</h2>
 
+        {/* ==== LOGIN & REGISTER ==== */}
+        <div style={{ marginBottom: 20 }}>
+          {!localStorage.getItem("token") ? (
+            <>
+              <button
+                onClick={() => (window.location.href = "/login")}
+                style={{
+                  background: "#6c5ce7",
+                  color: "white",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  width: "100%",
+                  border: "none",
+                  cursor: "pointer",
+                  marginBottom: 8,
+                  fontWeight: 500,
+                }}
+              >
+                🔐 Đăng nhập
+              </button>
+
+              <button
+                onClick={() => (window.location.href = "/register")}
+                style={{
+                  background: "#00b894",
+                  color: "white",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  width: "100%",
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 500,
+                }}
+              >
+                📝 Đăng ký
+              </button>
+            </>
+          ) : (
+            <>
+              <div
+                style={{
+                  padding: 8,
+                  background: "#eaeaea",
+                  borderRadius: 6,
+                  textAlign: "center",
+                  marginBottom: 10,
+                  fontWeight: 500,
+                }}
+              >
+                👤 Xin chào, {localStorage.getItem("fullname")}
+              </div>
+
+              {localStorage.getItem("role") === "admin" && (
+                <button
+                  onClick={() => (window.location.href = "/admin")}
+                  style={{
+                    background: "#0984e3",
+                    color: "white",
+                    padding: "8px 12px",
+                    borderRadius: "6px",
+                    width: "100%",
+                    border: "none",
+                    cursor: "pointer",
+                    marginBottom: 10,
+                    fontWeight: 500,
+                  }}
+                >
+                  🛠 Trang quản trị
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  localStorage.clear();
+                  window.location.href = "/";
+                }}
+                style={{
+                  background: "#d63031",
+                  color: "white",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  width: "100%",
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 500,
+                }}
+              >
+                🚪 Đăng xuất
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* FILTER UI */}
         <label>Tỉnh / Thành phố</label>
         <select
           value={province}
@@ -208,12 +253,12 @@ export default function HomePage() {
           style={{
             background: "#007bff",
             color: "white",
-            border: "none",
             padding: "8px 12px",
             borderRadius: "6px",
-            marginBottom: 15,
             width: "100%",
             cursor: "pointer",
+            marginBottom: 15,
+            border: "none",
             fontWeight: 500,
           }}
         >
@@ -235,7 +280,8 @@ export default function HomePage() {
         )}
       </aside>
 
-      <main style={{ flex: 1 }}>
+      {/* MAP */}
+      <main className="map-container" style={{ flex: 1, position: "relative" }}>
         <MapView
           province={province}
           district={district}
@@ -251,3 +297,4 @@ export default function HomePage() {
     </div>
   );
 }
+  
