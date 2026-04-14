@@ -4,7 +4,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminRoute from "./routes/AdminRoute";
-
+import "./App.css";
 
 export default function App() {
   return (
