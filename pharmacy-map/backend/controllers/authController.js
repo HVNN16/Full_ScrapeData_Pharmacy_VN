@@ -7,7 +7,15 @@ export const register = async (req, res) => {
   const { fullname, email, password } = req.body;
 
   try {
-    const check = await pool.query("SELECT * FROM users WHERE email=$1", [email]);
+    if (!fullname || !email || !password) {
+      return res.status(400).json({ message: "Vui lòng nhập đầy đủ thông tin!" });
+    }
+
+    const check = await pool.query(
+      "SELECT * FROM users WHERE email = $1",
+      [email]
+    );
+
     if (check.rowCount > 0) {
       return res.status(400).json({ message: "Email đã tồn tại!" });
     }
@@ -15,13 +23,22 @@ export const register = async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
-      "INSERT INTO users(fullname, email, password) VALUES ($1,$2,$3) RETURNING id, fullname, email, role",
-      [fullname, email, hashed]
+      `
+      INSERT INTO users(fullname, email, password, role)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, fullname, email, role
+      `,
+      [fullname, email, hashed, "user"]
     );
 
-    res.json({ success: true, user: result.rows[0] });
+    return res.status(201).json({
+      success: true,
+      message: "Đăng ký thành công!",
+      user: result.rows[0],
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("REGISTER ERROR:", err);
+    return res.status(500).json({ message: err.message });
   }
 };
 
@@ -29,30 +46,51 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
   const { email, password } = req.body;
 
-  const result = await pool.query(
-    "SELECT * FROM users WHERE email = $1",
-    [email]
-  );
+  try {
+    if (!email || !password) {
+      return res.status(400).json({ message: "Vui lòng nhập email và mật khẩu!" });
+    }
 
-  if (result.rowCount === 0)
-    return res.status(400).json({ message: "Email không tồn tại!" });
+    const result = await pool.query(
+      "SELECT * FROM users WHERE email = $1",
+      [email]
+    );
 
-  const user = result.rows[0];
+    if (result.rowCount === 0) {
+      return res.status(400).json({ message: "Email không tồn tại!" });
+    }
 
-  const valid = await bcrypt.compare(password, user.password);
-  if (!valid)
-    return res.status(400).json({ message: "Sai mật khẩu!" });
+    const user = result.rows[0];
 
-  const token = jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) {
+      return res.status(400).json({ message: "Sai mật khẩu!" });
+    }
 
-  res.json({
-    success: true,
-    token,
-    role: user.role,
-    fullname: user.fullname,
-  });
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        fullname: user.fullname,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    return res.json({
+      success: true,
+      message: "Đăng nhập thành công!",
+      token,
+      user: {
+        id: user.id,
+        fullname: user.fullname,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (err) {
+    console.error("LOGIN ERROR:", err);
+    return res.status(500).json({ message: err.message });
+  }
 };

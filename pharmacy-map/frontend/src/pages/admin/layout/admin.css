@@ -385,6 +385,39 @@ body,
 .btn-cancel:hover {
   background: #24994e;
 }
+.admin-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.admin-tab {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-weight: 700;
+  background: #e5e7eb;
+  color: #374151;
+  transition: 0.2s ease;
+}
+
+.admin-tab:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.admin-tab.active {
+  background: #1e88e5;
+  color: #fff;
+}
 
 /* ============================
    RESPONSIVE

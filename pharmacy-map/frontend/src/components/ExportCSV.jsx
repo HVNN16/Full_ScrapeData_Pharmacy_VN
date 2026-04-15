@@ -6,13 +6,14 @@ const API_BASE_URL =
 export default function ExportCSV({ province, district }) {
   const [loading, setLoading] = useState(false);
 
-  const isAdmin = useMemo(() => {
-    return localStorage.getItem("role") === "admin";
+  const canExport = useMemo(() => {
+    const role = localStorage.getItem("role");
+    return role === "admin" || role === "company";
   }, []);
 
   const handleExport = useCallback(async () => {
-    if (!isAdmin) {
-      alert("❌ Chỉ admin mới được xuất CSV.");
+    if (!canExport) {
+      alert("❌ Chỉ admin hoặc company mới được xuất CSV.");
       return;
     }
 
@@ -41,7 +42,7 @@ export default function ExportCSV({ province, district }) {
       }
 
       if (res.status === 403) {
-        throw new Error("Bạn không có quyền admin để xuất CSV.");
+        throw new Error("Bạn không có quyền xuất CSV.");
       }
 
       if (!res.ok) {
@@ -65,9 +66,9 @@ export default function ExportCSV({ province, district }) {
     } finally {
       setLoading(false);
     }
-  }, [province, district, isAdmin]);
+  }, [province, district, canExport]);
 
-  if (!isAdmin) return null;
+  if (!canExport) return null;
 
   return (
     <div

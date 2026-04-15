@@ -6,6 +6,8 @@ dotenv.config();
 import adminPharmacies from "./routes/adminPharmacies.js";
 import pharmaciesRoute from "./routes/pharmacies.js";
 import authRoutes from "./routes/auth.js";
+import adminUsersRoutes from "./routes/adminUsers.js";
+
 
 const app = express();
 
@@ -18,7 +20,7 @@ app.use("/api", pharmaciesRoute);
 app.use("/api/auth", authRoutes); 
 app.use("/api/admin/pharmacies", adminPharmacies);
 
-
+app.use("/api/admin/users", adminUsersRoutes);
 // Server Start
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>

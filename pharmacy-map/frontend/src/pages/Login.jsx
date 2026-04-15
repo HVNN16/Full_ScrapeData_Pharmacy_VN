@@ -10,17 +10,21 @@ export default function Login() {
     try {
       const res = await api.post("/auth/login", { email, password });
 
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("role", res.data.role);
-      localStorage.setItem("fullname", res.data.fullname);
+      const { token, user } = res.data;
 
-      if (res.data.role === "admin") {
+      localStorage.setItem("token", token);
+      localStorage.setItem("role", user.role);
+      localStorage.setItem("fullname", user.fullname);
+      localStorage.setItem("userId", user.id);
+
+      if (user.role === "admin") {
         window.location.href = "/admin";
       } else {
         window.location.href = "/";
       }
     } catch (err) {
-      alert("Sai tài khoản hoặc mật khẩu!");
+      console.error(err);
+      alert(err?.response?.data?.message || "Sai tài khoản hoặc mật khẩu!");
     }
   };
 
@@ -39,7 +43,6 @@ export default function Login() {
         position: "relative",
       }}
     >
-      {/* LỚP LÀM MỜ */}
       <div
         style={{
           position: "absolute",
@@ -47,9 +50,8 @@ export default function Login() {
           background: "rgba(255,255,255,0.25)",
           backdropFilter: "blur(4px)",
         }}
-      ></div>
+      />
 
-      {/* FORM LOGIN */}
       <div
         style={{
           position: "relative",
@@ -62,7 +64,6 @@ export default function Login() {
           textAlign: "center",
         }}
       >
-        {/* ICON MAP */}
         <div
           style={{
             position: "absolute",
@@ -97,9 +98,10 @@ export default function Login() {
           Tra cứu vị trí – tìm nhà thuốc nhanh nhất
         </p>
 
-        {/* EMAIL */}
         <input
+          type="email"
           placeholder="Email"
+          value={email}
           onChange={(e) => setEmail(e.target.value)}
           style={{
             width: "90%",
@@ -111,10 +113,10 @@ export default function Login() {
           }}
         />
 
-        {/* PASSWORD */}
         <input
           type="password"
           placeholder="Mật khẩu"
+          value={password}
           onChange={(e) => setPassword(e.target.value)}
           style={{
             width: "90%",
@@ -145,7 +147,6 @@ export default function Login() {
           Đăng nhập
         </button>
 
-        {/* 👉 LINK TỚI ĐĂNG KÝ */}
         <p style={{ marginTop: 15, fontSize: 14, color: "#444" }}>
           Chưa có tài khoản?{" "}
           <a

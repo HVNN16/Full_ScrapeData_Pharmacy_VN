@@ -9,7 +9,11 @@ import {
   getDistrictStats,
 } from "../controllers/pharmacyStatsController.js";
 import { exportPharmaciesCSV } from "../controllers/exportController.js";
-import { verifyToken, verifyAdmin } from "../middlewares/auth.js";
+import {
+  verifyToken,
+  verifyAdmin,
+  verifyExportRole,
+} from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -18,6 +22,8 @@ router.get("/provinces", getProvinces);
 router.get("/heat", getHeatmap);
 router.get("/stats/province", getProvinceStats);
 router.get("/stats/district", getDistrictStats);
-router.get("/export-csv", verifyToken, verifyAdmin, exportPharmaciesCSV);
+
+// admin + company đều export được
+router.get("/export-csv", verifyToken, verifyExportRole, exportPharmaciesCSV);
 
 export default router;
