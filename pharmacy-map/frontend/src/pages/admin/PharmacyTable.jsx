@@ -4,10 +4,12 @@ import PROVINCE_DISTRICTS from "../../data/provinceDistricts";
 import "./layout/admin.css";
 import noImage from "../../assets/no-image.jpg";
 
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 function isValidImageString(s) {
   const v = (s ?? "").toString().trim();
   if (!v) return false;
-  // ✅ giống backend
   return /^https?:\/\//i.test(v) || /\.(jpg|jpeg|png|webp|gif)$/i.test(v);
 }
 
@@ -18,7 +20,7 @@ function ImageCell({ imageValue, showDefaultWhenInvalid }) {
   const src = useMemo(() => {
     if (!valid) return showDefaultWhenInvalid ? noImage : "";
     if (raw.startsWith("http")) return raw;
-    return `http://localhost:5000/uploads/${raw}`;
+    return `${API_BASE_URL}/uploads/${raw}`;
   }, [raw, valid, showDefaultWhenInvalid]);
 
   return (
@@ -38,13 +40,42 @@ function ImageCell({ imageValue, showDefaultWhenInvalid }) {
         <img
           src={src}
           alt="pharmacy"
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
           onError={(e) => {
             if (showDefaultWhenInvalid) e.currentTarget.src = noImage;
             else e.currentTarget.style.display = "none";
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+function PaginationBar({ page, totalPages, loading, setPage }) {
+  return (
+    <div className="pagination pagination-sticky">
+      <button
+        disabled={page === 1 || loading}
+        onClick={() => setPage((prev) => prev - 1)}
+      >
+        ⬅ Prev
+      </button>
+
+      <span>
+        Trang {page} / {totalPages}
+      </span>
+
+      <button
+        disabled={page === totalPages || loading}
+        onClick={() => setPage((prev) => prev + 1)}
+      >
+        Next ➡
+      </button>
     </div>
   );
 }
@@ -66,22 +97,30 @@ export default function PharmacyTable({ onEdit }) {
   const perPage = 20;
   const totalPages = Math.max(1, Math.ceil(total / perPage));
 
-  const getDistricts = () => (!province ? [] : PROVINCE_DISTRICTS[province] || []);
+  const abortRef = useRef(null);
+
+  const districts = useMemo(() => {
+    if (!province) return [];
+    return PROVINCE_DISTRICTS[province] || [];
+  }, [province]);
 
   useEffect(() => {
-    const t = setTimeout(() => setSearch(searchInput), 350);
+    const t = setTimeout(() => {
+      setSearch(searchInput.trim());
+    }, 350);
+
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  const abortRef = useRef(null);
-
   const load = async () => {
     if (abortRef.current) abortRef.current.abort();
+
     const controller = new AbortController();
     abortRef.current = controller;
 
     try {
       setLoading(true);
+
       const res = await api.get("/admin/pharmacies", {
         params: {
           page,
@@ -94,11 +133,11 @@ export default function PharmacyTable({ onEdit }) {
         signal: controller.signal,
       });
 
-      setList(Array.isArray(res.data.rows) ? res.data.rows : []);
-      setTotal(res.data.total || 0);
+      setList(Array.isArray(res.data?.rows) ? res.data.rows : []);
+      setTotal(Number(res.data?.total) || 0);
     } catch (err) {
       if (err?.code !== "ERR_CANCELED" && err?.name !== "CanceledError") {
-        console.error(err);
+        console.error("Lỗi tải danh sách nhà thuốc:", err);
       }
     } finally {
       setLoading(false);
@@ -107,7 +146,10 @@ export default function PharmacyTable({ onEdit }) {
 
   useEffect(() => {
     load();
-    return () => abortRef.current?.abort();
+
+    return () => {
+      abortRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, province, district, search, hasImage]);
 
@@ -116,9 +158,20 @@ export default function PharmacyTable({ onEdit }) {
       alert("❌ ID không hợp lệ, không thể xoá!");
       return;
     }
-    if (window.confirm("Bạn có chắc muốn xoá?")) {
+
+    if (!window.confirm("Bạn có chắc muốn xoá?")) return;
+
+    try {
       await api.delete(`/admin/pharmacies/${id}`);
-      load();
+
+      if (list.length === 1 && page > 1) {
+        setPage((prev) => prev - 1);
+      } else {
+        load();
+      }
+    } catch (err) {
+      console.error("Lỗi xoá nhà thuốc:", err);
+      alert("❌ Xoá thất bại!");
     }
   };
 
@@ -135,7 +188,9 @@ export default function PharmacyTable({ onEdit }) {
         >
           <option value="">-- Tất cả tỉnh --</option>
           {Object.keys(PROVINCE_DISTRICTS).map((p) => (
-            <option key={p} value={p}>{p}</option>
+            <option key={p} value={p}>
+              {p}
+            </option>
           ))}
         </select>
 
@@ -148,8 +203,10 @@ export default function PharmacyTable({ onEdit }) {
           }}
         >
           <option value="">-- Tất cả huyện --</option>
-          {getDistricts().map((d) => (
-            <option key={d} value={d}>{d}</option>
+          {districts.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
           ))}
         </select>
 
@@ -176,75 +233,79 @@ export default function PharmacyTable({ onEdit }) {
         </label>
       </div>
 
-      <div style={{ height: 18, margin: "8px 0" }}>
-        <span style={{ fontSize: 13, color: "#666" }}>
+      <div className="admin-toolbar">
+        <div className="admin-summary">
           {loading ? "Đang tải dữ liệu..." : `Tổng: ${total} nhà thuốc`}
-        </span>
+        </div>
+
+        <PaginationBar
+          page={page}
+          totalPages={totalPages}
+          loading={loading}
+          setPage={setPage}
+        />
       </div>
 
-      <table className="admin-table">
-        <thead>
-          <tr>
-            <th style={{ width: 80 }}>ID</th>
-            <th>Tên</th>
-            <th>Địa chỉ</th>
-            <th style={{ width: 160 }}>Tỉnh</th>
-            <th style={{ width: 140 }}>Huyện</th>
-            <th style={{ width: 90 }}>Rating</th>
-            <th style={{ width: 90 }}>Hình ảnh</th>
-            <th style={{ width: 120 }}>Hành động</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {(list || []).map((p) => (
-            <tr key={p.id}>
-              <td>{p.id}</td>
-              <td>{p.name}</td>
-              <td>{p.address}</td>
-              <td>{p.province}</td>
-              <td>{p.district}</td>
-              <td>{p.rating}</td>
-
-              <td style={{ textAlign: "center" }}>
-                {/* ✅ Nếu đang lọc hasImage => chỉ show ảnh hợp lệ (không show default) */}
-                {/* ✅ Nếu không lọc => show default khi ảnh không hợp lệ */}
-                <ImageCell
-                  imageValue={p.image}
-                  showDefaultWhenInvalid={!hasImage}
-                />
-              </td>
-
-              <td>
-                <button className="btn-edit" onClick={() => onEdit(p)}>✏</button>
-                <button className="btn-delete" onClick={() => remove(p.id)}>🗑</button>
-              </td>
-            </tr>
-          ))}
-
-          {!loading && (!list || list.length === 0) && (
+      <div className="table-wrap">
+        <table className="admin-table">
+          <thead>
             <tr>
-              <td colSpan={8} style={{ textAlign: "center", padding: 20 }}>
-                Không có dữ liệu
-              </td>
+              <th style={{ width: 80 }}>ID</th>
+              <th>Tên</th>
+              <th>Địa chỉ</th>
+              <th style={{ width: 160 }}>Tỉnh</th>
+              <th style={{ width: 140 }}>Huyện</th>
+              <th style={{ width: 90 }}>Rating</th>
+              <th style={{ width: 90 }}>Hình ảnh</th>
+              <th style={{ width: 120 }}>Hành động</th>
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
 
-      <div className="pagination">
-        <button disabled={page === 1 || loading} onClick={() => setPage(page - 1)}>
-          ⬅ Prev
-        </button>
+          <tbody>
+            {(list || []).map((p) => (
+              <tr key={p.id}>
+                <td>{p.id}</td>
+                <td>{p.name}</td>
+                <td>{p.address}</td>
+                <td>{p.province}</td>
+                <td>{p.district}</td>
+                <td>{p.rating}</td>
 
-        <span>Trang {page} / {totalPages}</span>
+                <td style={{ textAlign: "center" }}>
+                  <ImageCell
+                    imageValue={p.image}
+                    showDefaultWhenInvalid={!hasImage}
+                  />
+                </td>
 
-        <button
-          disabled={page === totalPages || loading}
-          onClick={() => setPage(page + 1)}
-        >
-          Next ➡
-        </button>
+                <td>
+                  <button className="btn-edit" onClick={() => onEdit(p)}>
+                    ✏
+                  </button>
+                  <button className="btn-delete" onClick={() => remove(p.id)}>
+                    🗑
+                  </button>
+                </td>
+              </tr>
+            ))}
+
+            {!loading && (!list || list.length === 0) && (
+              <tr>
+                <td colSpan={8} style={{ textAlign: "center", padding: 20 }}>
+                  Không có dữ liệu
+                </td>
+              </tr>
+            )}
+
+            {loading && (
+              <tr>
+                <td colSpan={8} style={{ textAlign: "center", padding: 20 }}>
+                  Đang tải dữ liệu...
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

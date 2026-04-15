@@ -1,6 +1,5 @@
 import React from "react";
 import "./admin.css";
-// import Sidebar from "./Sidebar";
 import AdminHeader from "./AdminHeader";
 
 export default function AdminLayout({ children }) {
@@ -8,9 +7,7 @@ export default function AdminLayout({ children }) {
     <div className="admin-container">
       <div className="admin-main">
         <AdminHeader />
-        <div className="admin-content">
-          {children}
-        </div>
+        <main className="admin-page">{children}</main>
       </div>
     </div>
   );
