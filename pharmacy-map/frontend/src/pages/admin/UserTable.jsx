@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 const API_BASE_URL =
   process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -11,7 +11,7 @@ export default function UserTable() {
 
   const token = localStorage.getItem("token");
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -24,15 +24,15 @@ export default function UserTable() {
 
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.message);
+      if (!res.ok) throw new Error(data.message || "Không tải được user");
 
-      setUsers(data);
+      setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Lỗi tải user");
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   const updateRole = async (id, role) => {
     try {
@@ -49,13 +49,13 @@ export default function UserTable() {
 
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.message);
+      if (!res.ok) throw new Error(data.message || "Cập nhật role thất bại");
 
       setUsers((prev) =>
         prev.map((u) => (u.id === id ? { ...u, role } : u))
       );
     } catch (err) {
-      alert(err.message);
+      alert(err.message || "Không đổi được quyền user");
     } finally {
       setUpdatingId(null);
     }
@@ -74,17 +74,17 @@ export default function UserTable() {
 
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.message);
+      if (!res.ok) throw new Error(data.message || "Xóa user thất bại");
 
       setUsers((prev) => prev.filter((u) => u.id !== id));
     } catch (err) {
-      alert(err.message);
+      alert(err.message || "Không xóa được user");
     }
   };
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [loadUsers]);
 
   return (
     <div className="admin-content">
@@ -117,10 +117,7 @@ export default function UserTable() {
                     value={u.role}
                     disabled={updatingId === u.id}
                     onChange={(e) => updateRole(u.id, e.target.value)}
-                    style={{
-                      padding: 6,
-                      borderRadius: 6,
-                    }}
+                    style={{ padding: 6, borderRadius: 6 }}
                   >
                     <option value="user">User</option>
                     <option value="company">Company</option>
