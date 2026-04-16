@@ -8,9 +8,7 @@ export default function AdminDashboard() {
   const [selected, setSelected] = useState(null);
   const [activeTab, setActiveTab] = useState("pharmacies");
 
-  const role = useMemo(() => {
-    return localStorage.getItem("role");
-  }, []);
+  const role = useMemo(() => localStorage.getItem("role"), []);
 
   if (role !== "admin") {
     return (
@@ -36,6 +34,7 @@ export default function AdminDashboard() {
           <button
             className={`admin-tab ${activeTab === "pharmacies" ? "active" : ""}`}
             onClick={() => setActiveTab("pharmacies")}
+            type="button"
           >
             📋 Quản lý nhà thuốc
           </button>
@@ -43,44 +42,48 @@ export default function AdminDashboard() {
           <button
             className={`admin-tab ${activeTab === "users" ? "active" : ""}`}
             onClick={() => setActiveTab("users")}
+            type="button"
           >
             👤 Quản lý user
           </button>
         </div>
 
-        {activeTab === "pharmacies" && (
-          <>
-            <div className="admin-title">
-              <h1>📋 Quản lý nhà thuốc</h1>
+        <div className="admin-view">
+          {activeTab === "pharmacies" && (
+            <>
+              <div className="admin-title">
+                <h1>📋 Quản lý nhà thuốc</h1>
 
-              <button
-                className="btn btn-blue"
-                onClick={() => setSelected({})}
-              >
-                ➕ Thêm nhà thuốc
-              </button>
-            </div>
+                <button
+                  className="btn btn-blue"
+                  onClick={() => setSelected({})}
+                  type="button"
+                >
+                  ➕ Thêm nhà thuốc
+                </button>
+              </div>
 
-            <PharmacyTable onEdit={setSelected} />
+              <PharmacyTable onEdit={setSelected} />
 
-            {selected && (
-              <PharmacyForm
-                selected={selected}
-                onClose={() => setSelected(null)}
-              />
-            )}
-          </>
-        )}
+              {selected && (
+                <PharmacyForm
+                  selected={selected}
+                  onClose={() => setSelected(null)}
+                />
+              )}
+            </>
+          )}
 
-        {activeTab === "users" && (
-          <>
-            <div className="admin-title">
-              <h1>👤 Quản lý user</h1>
-            </div>
+          {activeTab === "users" && (
+            <>
+              <div className="admin-title">
+                <h1>👤 Quản lý user</h1>
+              </div>
 
-            <UserTable />
-          </>
-        )}
+              <UserTable />
+            </>
+          )}
+        </div>
       </div>
     </AdminLayout>
   );
