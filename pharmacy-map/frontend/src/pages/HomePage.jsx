@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchProvinces } from "../api";
 import MapView from "../components/MapView";
 import PharmacyList from "../components/PharmacyList";
@@ -20,8 +20,12 @@ export default function HomePage() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const isLoggedIn = !!localStorage.getItem("token");
-  const fullname = localStorage.getItem("fullname") || "Admin";
-  const role = localStorage.getItem("role");
+  const fullname = localStorage.getItem("fullname") || "Người dùng";
+  const role = localStorage.getItem("role") || "user";
+
+  const canUseAdvancedTools = useMemo(() => {
+    return role === "admin" || role === "company";
+  }, [role]);
 
   const normalizeProvinceName = (name) => {
     if (!name) return "";
@@ -35,7 +39,9 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    fetchProvinces().then(setProvinces);
+    fetchProvinces().then(setProvinces).catch((err) => {
+      console.error("Lỗi tải danh sách tỉnh:", err);
+    });
   }, []);
 
   useEffect(() => {
@@ -45,9 +51,189 @@ export default function HomePage() {
     setDistrict("");
   }, [province]);
 
+  useEffect(() => {
+    if (!canUseAdvancedTools) {
+      setShowStats(false);
+      setShowHeatmap(false);
+    }
+  }, [canUseAdvancedTools]);
+
   const handleLogout = () => {
     localStorage.clear();
     window.location.href = "/";
+  };
+
+  const handleToggleHeatmap = () => {
+    if (!canUseAdvancedTools) return;
+    setShowHeatmap((prev) => !prev);
+  };
+
+  const handleToggleStats = () => {
+    if (!canUseAdvancedTools) return;
+    setShowStats((prev) => !prev);
+  };
+
+  const renderAccountSection = () => {
+    if (!isLoggedIn) {
+      return (
+        <section className="panel-card">
+          <div className="panel-title">Tài khoản</div>
+          <div className="button-stack">
+            <button
+              className="btn btn-primary"
+              onClick={() => (window.location.href = "/login")}
+            >
+              🔐 Đăng nhập
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => (window.location.href = "/register")}
+            >
+              📝 Đăng ký
+            </button>
+          </div>
+        </section>
+      );
+    }
+
+    return (
+      <section className="panel-card">
+        <div className="panel-title">Tài khoản</div>
+
+        <div className="user-card">
+          <div className="user-avatar">👤</div>
+          <div>
+            <div className="user-label">Xin chào</div>
+            <div className="user-name">{fullname}</div>
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: 12,
+                color: "#666",
+                textTransform: "uppercase",
+                fontWeight: 600,
+              }}
+            >
+              Quyền: {role}
+            </div>
+          </div>
+        </div>
+
+        <div className="button-stack">
+          {role === "admin" && (
+            <button
+              className="btn btn-primary"
+              onClick={() => (window.location.href = "/admin")}
+            >
+              🛠 Trang quản trị
+            </button>
+          )}
+
+          <button className="btn btn-danger" onClick={handleLogout}>
+            🚪 Đăng xuất
+          </button>
+        </div>
+      </section>
+    );
+  };
+
+  const renderFilterSection = () => {
+    return (
+      <section className="panel-card">
+        <div className="panel-title">Bộ lọc dữ liệu</div>
+
+        <div className="form-group">
+          <label>Tỉnh / Thành phố</label>
+          <select
+            value={province}
+            onChange={(e) => setProvince(e.target.value)}
+            className="modern-input"
+          >
+            <option value="">-- Tất cả --</option>
+            {provinces.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label>Địa chỉ hành chính cấp 2</label>
+          <select
+            value={district}
+            onChange={(e) => setDistrict(e.target.value)}
+            className="modern-input"
+            disabled={!districts.length}
+          >
+            <option value="">-- Tất cả --</option>
+            {districts.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label>Rating tối thiểu</label>
+          <input
+            type="number"
+            value={ratingMin}
+            onChange={(e) => setRatingMin(e.target.value)}
+            placeholder="VD: 4.0"
+            className="modern-input"
+          />
+        </div>
+      </section>
+    );
+  };
+
+  const renderAdvancedToolsSection = () => {
+    if (!canUseAdvancedTools) return null;
+
+    return (
+      <section className="panel-card">
+        <div className="panel-title">Công cụ hiển thị</div>
+
+        <div className="button-stack">
+          <button
+            className={`btn ${showHeatmap ? "btn-danger-soft" : "btn-success"}`}
+            onClick={handleToggleHeatmap}
+          >
+            {showHeatmap ? "🧊 Tắt lớp nhiệt" : "🔥 Bật lớp nhiệt"}
+          </button>
+
+          <button className="btn btn-info" onClick={handleToggleStats}>
+            {showStats ? "🔙 Trở lại danh sách" : "📊 Xem thống kê theo tỉnh"}
+          </button>
+        </div>
+      </section>
+    );
+  };
+
+  const renderMainContent = () => {
+    if (showStats && canUseAdvancedTools) {
+      return (
+        <div className="panel-card content-card">
+          <ProvinceStats province={province} />
+        </div>
+      );
+    }
+
+    return (
+      <div className="panel-card content-card">
+        <PharmacyList
+          province={province}
+          district={district}
+          ratingMin={ratingMin}
+          userLocation={userLocation}
+          setSelectedPharmacy={setSelectedPharmacy}
+          setUserLocation={setUserLocation}
+          setRadiusKm={setRadiusKm}
+        />
+      </div>
+    );
   };
 
   return (
@@ -86,141 +272,13 @@ export default function HomePage() {
             </div>
           </div>
 
-          <section className="panel-card">
-            {!isLoggedIn ? (
-              <>
-                <div className="panel-title">Tài khoản</div>
-                <div className="button-stack">
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => (window.location.href = "/login")}
-                  >
-                    🔐 Đăng nhập
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => (window.location.href = "/register")}
-                  >
-                    📝 Đăng ký
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="panel-title">Tài khoản</div>
-                <div className="user-card">
-                  <div className="user-avatar">👤</div>
-                  <div>
-                    <div className="user-label">Xin chào</div>
-                    <div className="user-name">{fullname}</div>
-                  </div>
-                </div>
+          {renderAccountSection()}
 
-                <div className="button-stack">
-                  {role === "admin" && (
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => (window.location.href = "/admin")}
-                    >
-                      🛠 Trang quản trị
-                    </button>
-                  )}
+          {renderFilterSection()}
 
-                  <button className="btn btn-danger" onClick={handleLogout}>
-                    🚪 Đăng xuất
-                  </button>
-                </div>
-              </>
-            )}
-          </section>
+          {renderAdvancedToolsSection()}
 
-          <section className="panel-card">
-            <div className="panel-title">Bộ lọc dữ liệu</div>
-
-            <div className="form-group">
-              <label>Tỉnh / Thành phố</label>
-              <select
-                value={province}
-                onChange={(e) => setProvince(e.target.value)}
-                className="modern-input"
-              >
-                <option value="">-- Tất cả --</option>
-                {provinces.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Địa chỉ hành chính cấp 2</label>
-              <select
-                value={district}
-                onChange={(e) => setDistrict(e.target.value)}
-                className="modern-input"
-                disabled={!districts.length}
-              >
-                <option value="">-- Tất cả --</option>
-                {districts.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Rating tối thiểu</label>
-              <input
-                type="number"
-                value={ratingMin}
-                onChange={(e) => setRatingMin(e.target.value)}
-                placeholder="VD: 4.0"
-                className="modern-input"
-              />
-            </div>
-          </section>
-
-          <section className="panel-card">
-            <div className="panel-title">Công cụ hiển thị</div>
-
-            <div className="button-stack">
-              <button
-                className={`btn ${showHeatmap ? "btn-danger-soft" : "btn-success"}`}
-                onClick={() => setShowHeatmap(!showHeatmap)}
-              >
-                {showHeatmap ? "🧊 Tắt lớp nhiệt" : "🔥 Bật lớp nhiệt"}
-              </button>
-
-              <button
-                className="btn btn-info"
-                onClick={() => setShowStats(!showStats)}
-              >
-                {showStats ? "🔙 Trở lại danh sách" : "📊 Xem thống kê theo tỉnh"}
-              </button>
-            </div>
-          </section>
-
-          <section className="panel-content">
-            {showStats ? (
-              <div className="panel-card content-card">
-                <ProvinceStats province={province} />
-              </div>
-            ) : (
-              <div className="panel-card content-card">
-                <PharmacyList
-                  province={province}
-                  district={district}
-                  ratingMin={ratingMin}
-                  userLocation={userLocation}
-                  setSelectedPharmacy={setSelectedPharmacy}
-                  setUserLocation={setUserLocation}
-                  setRadiusKm={setRadiusKm}
-                />
-              </div>
-            )}
-          </section>
+          <section className="panel-content">{renderMainContent()}</section>
         </div>
       </aside>
 
@@ -233,15 +291,16 @@ export default function HomePage() {
             selectedPharmacy={selectedPharmacy}
             userLocation={userLocation}
             radiusKm={radiusKm}
-            showHeatmap={showHeatmap}
+            showHeatmap={canUseAdvancedTools ? showHeatmap : false}
           />
         </div>
 
-        <div className="export-floating">
-          <ExportCSV province={province} district={district} />
-        </div>
+        {(role === "admin" || role === "company") && (
+          <div className="export-floating">
+            <ExportCSV province={province} district={district} />
+          </div>
+        )}
       </main>
     </div>
   );
 }
-  
