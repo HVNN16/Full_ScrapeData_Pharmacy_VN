@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -16,7 +16,7 @@ import {
 const API_BASE_URL =
   process.env.REACT_APP_API_URL || "http://localhost:5000";
 
-export default function ProvinceStats({ province }) {
+function ProvinceStats({ province }) {
   const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -183,3 +183,5 @@ export default function ProvinceStats({ province }) {
     </div>
   );
 }
+
+export default React.memo(ProvinceStats);

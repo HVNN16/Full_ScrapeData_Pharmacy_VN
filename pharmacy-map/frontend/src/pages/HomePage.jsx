@@ -9,6 +9,7 @@ import LoadingScreen from "../components/LoadingScreen";
 
 export default function HomePage() {
   const [initialLoading, setInitialLoading] = useState(true);
+  const [showLogoutPopup, setShowLogoutPopup] = useState(false);
 
   const [provinces, setProvinces] = useState([]);
   const [province, setProvince] = useState("");
@@ -46,9 +47,11 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    fetchProvinces().then(setProvinces).catch((err) => {
-      console.error("Lỗi tải danh sách tỉnh:", err);
-    });
+    fetchProvinces()
+      .then(setProvinces)
+      .catch((err) => {
+        console.error("Lỗi tải danh sách tỉnh:", err);
+      });
   }, []);
 
   useEffect(() => {
@@ -65,7 +68,7 @@ export default function HomePage() {
     }
   }, [canUseAdvancedTools]);
 
-  const handleLogout = () => {
+  const confirmLogout = () => {
     localStorage.clear();
     window.location.href = "/";
   };
@@ -136,7 +139,10 @@ export default function HomePage() {
             </button>
           )}
 
-          <button className="btn btn-danger" onClick={handleLogout}>
+          <button
+            className="btn btn-danger"
+            onClick={() => setShowLogoutPopup(true)}
+          >
             🚪 Đăng xuất
           </button>
         </div>
@@ -323,6 +329,39 @@ export default function HomePage() {
           )}
         </main>
       </div>
+
+      {showLogoutPopup && (
+        <div
+          className="logout-popup-overlay"
+          onClick={() => setShowLogoutPopup(false)}
+        >
+          <div
+            className="logout-popup-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="logout-popup-icon">🚪</div>
+
+            <h2 className="logout-popup-title">Xác nhận đăng xuất</h2>
+
+            <p className="logout-popup-text">
+              Bạn có chắc muốn đăng xuất khỏi hệ thống không?
+            </p>
+
+            <div className="logout-popup-actions">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowLogoutPopup(false)}
+              >
+                Hủy
+              </button>
+
+              <button className="btn btn-danger" onClick={confirmLogout}>
+                🚪 Đăng xuất
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

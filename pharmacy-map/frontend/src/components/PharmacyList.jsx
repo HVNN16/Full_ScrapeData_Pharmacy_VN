@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 
-export default function PharmacyList({
+function PharmacyList({
   province,
   district,
   ratingMin,
@@ -16,7 +16,6 @@ export default function PharmacyList({
   const [radius, setRadius] = useState(5);
   const [sortByDistance, setSortByDistance] = useState(true);
 
-  // Lấy dữ liệu từ backend, dùng chung api.js để local/deploy đều chạy
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -88,7 +87,6 @@ export default function PharmacyList({
     );
   };
 
-  // Dữ liệu sau khi tìm kiếm theo tên / địa chỉ
   const searchedFeatures = useMemo(() => {
     const keyword = search.trim().toLowerCase();
 
@@ -101,7 +99,6 @@ export default function PharmacyList({
     });
   }, [features, search]);
 
-  // Cập nhật danh sách hiển thị khi đổi data hoặc search
   useEffect(() => {
     setFiltered(searchedFeatures);
 
@@ -247,7 +244,8 @@ export default function PharmacyList({
         filtered.map((f, i) => {
           const props = f.properties || {};
           const [lon, lat] = f.geometry.coordinates;
-          const dist = typeof f.distance === "number" ? f.distance.toFixed(2) : null;
+          const dist =
+            typeof f.distance === "number" ? f.distance.toFixed(2) : null;
 
           return (
             <div
@@ -285,3 +283,5 @@ export default function PharmacyList({
     </div>
   );
 }
+
+export default React.memo(PharmacyList);

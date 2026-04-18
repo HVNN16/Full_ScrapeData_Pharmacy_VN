@@ -1,6 +1,12 @@
-// src/components/MapView.jsx
-import { MapContainer, TileLayer, useMap, Circle, Marker, Popup } from "react-leaflet";
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  MapContainer,
+  TileLayer,
+  useMap,
+  Circle,
+  Marker,
+  Popup,
+} from "react-leaflet";
 import { fetchGeoJSON } from "../api";
 import PharmacyMarkers from "./PharmacyMarkers";
 import "leaflet/dist/leaflet.css";
@@ -28,13 +34,17 @@ function normalizeName(name) {
 
 function computeDistrictCentroid(features, district) {
   if (!features?.features?.length || !district) return null;
+
   const points = features.features
     .filter(
-      (f) => (f.properties?.district || "").toLowerCase() === district.toLowerCase()
+      (f) =>
+        (f.properties?.district || "").toLowerCase() === district.toLowerCase()
     )
     .map((f) => {
       const [lon, lat] = f.geometry?.coordinates || [];
-      return typeof lat === "number" && typeof lon === "number" ? { lat, lon } : null;
+      return typeof lat === "number" && typeof lon === "number"
+        ? { lat, lon }
+        : null;
     })
     .filter(Boolean);
 
@@ -121,7 +131,7 @@ const userIcon = new L.Icon({
   popupAnchor: [0, -28],
 });
 
-export default function MapView({
+function MapView({
   province,
   district,
   ratingMin,
@@ -139,7 +149,10 @@ export default function MapView({
   useEffect(() => {
     const handleManualReload = () => setReloadKey(Date.now());
     window.addEventListener("reloadMap", handleManualReload);
-    return () => window.removeEventListener("reloadMap", handleManualReload);
+
+    return () => {
+      window.removeEventListener("reloadMap", handleManualReload);
+    };
   }, []);
 
   useEffect(() => {
@@ -206,21 +219,44 @@ export default function MapView({
         </div>
       )}
 
-      <MapContainer center={[16.05, 108.2]} zoom={6} style={{ height: "100%", width: "100%" }}>
+      <MapContainer
+        center={[16.05, 108.2]}
+        zoom={6}
+        style={{ height: "100%", width: "100%" }}
+      >
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <PharmacyMarkers features={features} selectedPharmacy={selectedPharmacy} />
-        <HeatLayer features={features?.features || []} enabled={showHeatmap} />
-        <RouteToPharmacy userLocation={userLocation} selectedPharmacy={selectedPharmacy} />
+        <PharmacyMarkers
+          features={features}
+          selectedPharmacy={selectedPharmacy}
+        />
+
+        <HeatLayer
+          features={features?.features || []}
+          enabled={showHeatmap}
+        />
+
+        <RouteToPharmacy
+          userLocation={userLocation}
+          selectedPharmacy={selectedPharmacy}
+        />
+
         <FlyToSelected selectedPharmacy={selectedPharmacy} />
-        <FlyToArea province={province} district={district} features={features} />
+        <FlyToArea
+          province={province}
+          district={district}
+          features={features}
+        />
 
         {userLocation && (
           <>
-            <Marker position={[userLocation.lat, userLocation.lon]} icon={userIcon}>
+            <Marker
+              position={[userLocation.lat, userLocation.lon]}
+              icon={userIcon}
+            >
               <Popup>
                 <b>📍 Vị trí của bạn</b>
                 <br />
@@ -231,7 +267,11 @@ export default function MapView({
             <Circle
               center={[userLocation.lat, userLocation.lon]}
               radius={radiusKm * 1000}
-              pathOptions={{ color: "#007bff", fillColor: "#007bff", fillOpacity: 0.15 }}
+              pathOptions={{
+                color: "#007bff",
+                fillColor: "#007bff",
+                fillOpacity: 0.15,
+              }}
             />
 
             <FlyToUser userLocation={userLocation} />
@@ -241,3 +281,5 @@ export default function MapView({
     </div>
   );
 }
+
+export default React.memo(MapView);
