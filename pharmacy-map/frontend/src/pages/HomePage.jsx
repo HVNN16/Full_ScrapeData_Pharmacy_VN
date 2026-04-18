@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchProvinces } from "../api";
 import MapView from "../components/MapView";
 import PharmacyList from "../components/PharmacyList";
 import PROVINCE_DISTRICTS from "../data/provinceDistricts";
 import ProvinceStats from "../components/ProvinceStats";
 import ExportCSV from "../components/ExportCSV";
+import LoadingScreen from "../components/LoadingScreen";
 
 export default function HomePage() {
+  const [initialLoading, setInitialLoading] = useState(true);
+
   const [provinces, setProvinces] = useState([]);
   const [province, setProvince] = useState("");
   const [districts, setDistricts] = useState([]);
@@ -26,6 +29,10 @@ export default function HomePage() {
   const canUseAdvancedTools = useMemo(() => {
     return role === "admin" || role === "company";
   }, [role]);
+
+  const handleInitialLoaded = useCallback(() => {
+    setInitialLoading(false);
+  }, []);
 
   const normalizeProvinceName = (name) => {
     if (!name) return "";
@@ -237,70 +244,85 @@ export default function HomePage() {
   };
 
   return (
-    <div className="home-layout">
-      <button
-        className="mobile-menu-btn"
-        onClick={() => setMenuOpen(true)}
-        aria-label="Mở menu"
-      >
-        ☰
-      </button>
-
-      {menuOpen && (
-        <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />
-      )}
-
-      <aside className={`sidebar ${menuOpen ? "show" : ""}`}>
-        <div className="sidebar-inner">
-          <div className="sidebar-top">
-            <button
-              className="sidebar-close-btn"
-              onClick={() => setMenuOpen(false)}
-              aria-label="Đóng menu"
-            >
-              ✕
-            </button>
-
-            <div className="brand-block">
-              <div className="brand-icon">💊</div>
-              <div>
-                <h1 className="brand-title">Bản đồ nhà thuốc</h1>
-                <p className="brand-subtitle">
-                  Quản lý, lọc và trực quan dữ liệu nhà thuốc
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {renderAccountSection()}
-
-          {renderFilterSection()}
-
-          {renderAdvancedToolsSection()}
-
-          <section className="panel-content">{renderMainContent()}</section>
-        </div>
-      </aside>
-
-      <main className="map-wrapper">
-        <div className="map-frame">
-          <MapView
-            province={province}
-            district={district}
-            ratingMin={ratingMin}
-            selectedPharmacy={selectedPharmacy}
-            userLocation={userLocation}
-            radiusKm={radiusKm}
-            showHeatmap={canUseAdvancedTools ? showHeatmap : false}
+    <>
+      {initialLoading && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99999 }}>
+          <LoadingScreen
+            title="Pharmacy Map"
+            subtitle="Đang tải dữ liệu nhà thuốc, vui lòng chờ một chút..."
           />
         </div>
+      )}
 
-        {(role === "admin" || role === "company") && (
-          <div className="export-floating">
-            <ExportCSV province={province} district={district} />
-          </div>
+      <div
+        className="home-layout"
+        style={{
+          opacity: initialLoading ? 0 : 1,
+          pointerEvents: initialLoading ? "none" : "auto",
+        }}
+      >
+        <button
+          className="mobile-menu-btn"
+          onClick={() => setMenuOpen(true)}
+          aria-label="Mở menu"
+        >
+          ☰
+        </button>
+
+        {menuOpen && (
+          <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />
         )}
-      </main>
-    </div>
+
+        <aside className={`sidebar ${menuOpen ? "show" : ""}`}>
+          <div className="sidebar-inner">
+            <div className="sidebar-top">
+              <button
+                className="sidebar-close-btn"
+                onClick={() => setMenuOpen(false)}
+                aria-label="Đóng menu"
+              >
+                ✕
+              </button>
+
+              <div className="brand-block">
+                <div className="brand-icon">💊</div>
+                <div>
+                  <h1 className="brand-title">Bản đồ nhà thuốc</h1>
+                  <p className="brand-subtitle">
+                    Quản lý, lọc và trực quan dữ liệu nhà thuốc
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {renderAccountSection()}
+            {renderFilterSection()}
+            {renderAdvancedToolsSection()}
+            <section className="panel-content">{renderMainContent()}</section>
+          </div>
+        </aside>
+
+        <main className="map-wrapper">
+          <div className="map-frame">
+            <MapView
+              province={province}
+              district={district}
+              ratingMin={ratingMin}
+              selectedPharmacy={selectedPharmacy}
+              userLocation={userLocation}
+              radiusKm={radiusKm}
+              showHeatmap={canUseAdvancedTools ? showHeatmap : false}
+              onInitialLoaded={handleInitialLoaded}
+            />
+          </div>
+
+          {(role === "admin" || role === "company") && (
+            <div className="export-floating">
+              <ExportCSV province={province} district={district} />
+            </div>
+          )}
+        </main>
+      </div>
+    </>
   );
 }

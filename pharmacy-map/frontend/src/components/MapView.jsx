@@ -1,6 +1,6 @@
 // src/components/MapView.jsx
 import { MapContainer, TileLayer, useMap, Circle, Marker, Popup } from "react-leaflet";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchGeoJSON } from "../api";
 import PharmacyMarkers from "./PharmacyMarkers";
 import "leaflet/dist/leaflet.css";
@@ -9,7 +9,6 @@ import districtCenters from "../data/districtCenters";
 import L from "leaflet";
 import RouteToPharmacy from "./RouteToPharmacy";
 import HeatLayer from "./HeatLayer";
-
 
 // === Utils ===
 function normalizeName(name) {
@@ -30,13 +29,17 @@ function normalizeName(name) {
 function computeDistrictCentroid(features, district) {
   if (!features?.features?.length || !district) return null;
   const points = features.features
-    .filter(f => (f.properties?.district || "").toLowerCase() === district.toLowerCase())
-    .map(f => {
+    .filter(
+      (f) => (f.properties?.district || "").toLowerCase() === district.toLowerCase()
+    )
+    .map((f) => {
       const [lon, lat] = f.geometry?.coordinates || [];
-      return (typeof lat === "number" && typeof lon === "number") ? { lat, lon } : null;
+      return typeof lat === "number" && typeof lon === "number" ? { lat, lon } : null;
     })
     .filter(Boolean);
+
   if (!points.length) return null;
+
   const lat = points.reduce((s, p) => s + p.lat, 0) / points.length;
   const lon = points.reduce((s, p) => s + p.lon, 0) / points.length;
   return [lat, lon];
@@ -45,12 +48,14 @@ function computeDistrictCentroid(features, district) {
 // === Fly effects ===
 function FlyToSelected({ selectedPharmacy }) {
   const map = useMap();
+
   useEffect(() => {
     if (selectedPharmacy) {
       const { lat, lon } = selectedPharmacy;
       map.flyTo([lat, lon], 16, { duration: 1.2 });
     }
   }, [selectedPharmacy, map]);
+
   return null;
 }
 
@@ -74,10 +79,6 @@ function FlyToArea({ province, district, features }) {
       const centroid = computeDistrictCentroid(features, district);
       if (centroid) {
         map.flyTo(centroid, 13.5, { duration: 1.5 });
-        console.log(
-          "CENTER_SUGGEST:",
-          `"${normD}": [${centroid[0].toFixed(6)}, ${centroid[1].toFixed(6)}],`
-        );
         return;
       }
     }
@@ -101,18 +102,18 @@ function FlyToArea({ province, district, features }) {
   return null;
 }
 
-// === Fly tới vị trí người dùng ===
 function FlyToUser({ userLocation }) {
   const map = useMap();
+
   useEffect(() => {
     if (userLocation) {
       map.flyTo([userLocation.lat, userLocation.lon], 13, { duration: 1.2 });
     }
   }, [userLocation, map]);
+
   return null;
 }
 
-// === Icon vị trí người dùng ===
 const userIcon = new L.Icon({
   iconUrl: "https://cdn-icons-png.flaticon.com/512/64/64113.png",
   iconSize: [30, 30],
@@ -127,11 +128,13 @@ export default function MapView({
   selectedPharmacy,
   userLocation,
   radiusKm,
-  showHeatmap, 
+  showHeatmap,
+  onInitialLoaded,
 }) {
   const [features, setFeatures] = useState(null);
   const [loading, setLoading] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const hasReportedInitialLoad = useRef(false);
 
   useEffect(() => {
     const handleManualReload = () => setReloadKey(Date.now());
@@ -139,26 +142,48 @@ export default function MapView({
     return () => window.removeEventListener("reloadMap", handleManualReload);
   }, []);
 
-  useEffect(() => setFeatures(null), [province, district, ratingMin]);
+  useEffect(() => {
+    setFeatures(null);
+  }, [province, district, ratingMin]);
 
   useEffect(() => {
+    let active = true;
+
     (async () => {
       try {
-        setLoading(true);
+        if (active) setLoading(true);
+
         const data = await fetchGeoJSON({
           province,
           district,
           rating_min: ratingMin || 0,
           limit: 10000,
         });
+
+        if (!active) return;
+
         setFeatures(data);
+
+        if (!hasReportedInitialLoad.current) {
+          hasReportedInitialLoad.current = true;
+          onInitialLoaded?.();
+        }
       } catch (e) {
         console.error("fetchGeoJSON error:", e);
+
+        if (!hasReportedInitialLoad.current) {
+          hasReportedInitialLoad.current = true;
+          onInitialLoaded?.();
+        }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     })();
-  }, [province, district, ratingMin, reloadKey]);
+
+    return () => {
+      active = false;
+    };
+  }, [province, district, ratingMin, reloadKey, onInitialLoaded]);
 
   return (
     <div style={{ position: "relative", height: "100%" }}>
@@ -183,24 +208,16 @@ export default function MapView({
 
       <MapContainer center={[16.05, 108.2]} zoom={6} style={{ height: "100%", width: "100%" }}>
         <TileLayer
-          attribution='&copy; OpenStreetMap contributors'
+          attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {/* 🏥 Marker nhà thuốc */}
         <PharmacyMarkers features={features} selectedPharmacy={selectedPharmacy} />
-
-        {/* 🔥 Heatmap layer */}
         <HeatLayer features={features?.features || []} enabled={showHeatmap} />
-
-        {/* 🧭 Hiển thị tuyến đường */}
         <RouteToPharmacy userLocation={userLocation} selectedPharmacy={selectedPharmacy} />
-
-        {/* 🚀 Di chuyển map */}
         <FlyToSelected selectedPharmacy={selectedPharmacy} />
         <FlyToArea province={province} district={district} features={features} />
 
-        {/* 📍 Vị trí người dùng + vòng tròn bán kính */}
         {userLocation && (
           <>
             <Marker position={[userLocation.lat, userLocation.lon]} icon={userIcon}>
@@ -216,6 +233,7 @@ export default function MapView({
               radius={radiusKm * 1000}
               pathOptions={{ color: "#007bff", fillColor: "#007bff", fillOpacity: 0.15 }}
             />
+
             <FlyToUser userLocation={userLocation} />
           </>
         )}
