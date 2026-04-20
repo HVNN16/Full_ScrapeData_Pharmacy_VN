@@ -74,7 +74,24 @@ const isNear = (lat1, lon1, lat2, lon2, meters = 30) => {
   return d <= meters;
 };
 
-function PharmacyMarkers({ features, selectedPharmacy }) {
+const isActiveMarker = (lat, lon, selectedPharmacy, activeRouteTarget) => {
+  const isSelected =
+    selectedPharmacy &&
+    isNear(lat, lon, selectedPharmacy.lat, selectedPharmacy.lon, 30);
+
+  const isRouting =
+    activeRouteTarget &&
+    isNear(lat, lon, activeRouteTarget.lat, activeRouteTarget.lon, 30);
+
+  return isSelected || isRouting;
+};
+
+function PharmacyMarkers({
+  features,
+  selectedPharmacy,
+  activeRouteTarget,
+  onRequestRoute,
+}) {
   const markerInstances = useRef([]);
   const clusterRef = useRef();
   const [ready, setReady] = useState(false);
@@ -88,10 +105,14 @@ function PharmacyMarkers({ features, selectedPharmacy }) {
   }, [features]);
 
   useEffect(() => {
-    if (!selectedPharmacy || !ready) return;
+    if (!selectedPharmacy && !activeRouteTarget) return;
+    if (!ready) return;
+
+    const target = activeRouteTarget || selectedPharmacy;
+    if (!target) return;
 
     const found = markerInstances.current.find((m) =>
-      isNear(m.lat, m.lon, selectedPharmacy.lat, selectedPharmacy.lon, 30)
+      isNear(m.lat, m.lon, target.lat, target.lon, 30)
     );
 
     if (!found?.instance) return;
@@ -103,24 +124,15 @@ function PharmacyMarkers({ features, selectedPharmacy }) {
     if (!map) return;
 
     const flyAndOpen = () => {
-      const currentMap = marker._map;
-      if (!currentMap) return;
+      const targetZoom = Math.max(map.getZoom(), 18);
+      map.flyTo(marker.getLatLng(), targetZoom, { duration: 0.8 });
 
-      const targetZoom = Math.max(currentMap.getZoom(), 18);
-      currentMap.flyTo(marker.getLatLng(), targetZoom, { duration: 0.8 });
-
-      currentMap.once("moveend", () => {
-        const liveMarker = marker;
-        const liveMap = liveMarker?._map;
-        if (!liveMap) return;
-
-        const parent = liveMarker.__parent;
+      map.once("moveend", () => {
+        const parent = marker.__parent;
         if (parent && parent.spiderfy) parent.spiderfy();
 
         setTimeout(() => {
-          if (liveMarker?._map) {
-            liveMarker.openPopup();
-          }
+          marker.openPopup();
         }, 150);
       });
     };
@@ -130,7 +142,7 @@ function PharmacyMarkers({ features, selectedPharmacy }) {
     } else {
       flyAndOpen();
     }
-  }, [selectedPharmacy, ready]);
+  }, [selectedPharmacy, activeRouteTarget, ready]);
 
   if (!features?.features?.length) return null;
 
@@ -162,9 +174,13 @@ function PharmacyMarkers({ features, selectedPharmacy }) {
       {features.features.map((f, i) => {
         const [lon, lat] = f.geometry.coordinates;
         const p = f.properties;
-        const selected =
-          selectedPharmacy &&
-          isNear(lat, lon, selectedPharmacy.lat, selectedPharmacy.lon, 30);
+
+        const selected = isActiveMarker(
+          lat,
+          lon,
+          selectedPharmacy,
+          activeRouteTarget
+        );
 
         return (
           <Marker
@@ -191,6 +207,36 @@ function PharmacyMarkers({ features, selectedPharmacy }) {
                 ⭐ {p.rating ?? "Chưa có"}
                 <br />
                 🏙️ {p.province ?? ""} {p.district ? ", " + p.district : ""}
+
+                <div style={{ marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onRequestRoute?.({
+                        name: p.name,
+                        address: p.address,
+                        lat,
+                        lon,
+                        province: p.province,
+                        district: p.district,
+                        phone: p.phone,
+                        rating: p.rating,
+                      })
+                    }
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      borderRadius: "10px",
+                      border: "none",
+                      background: "#2563eb",
+                      color: "#fff",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    🧭 Chỉ đường đến đây
+                  </button>
+                </div>
               </div>
             </Popup>
           </Marker>
