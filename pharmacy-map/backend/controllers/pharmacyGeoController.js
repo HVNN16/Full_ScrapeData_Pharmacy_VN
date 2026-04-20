@@ -1,3 +1,5 @@
+import { pool } from "../db.js";
+
 export const getPharmaciesGeoJSON = async (req, res) => {
   try {
     const { province, district, status, rating_min, bbox } = req.query;
