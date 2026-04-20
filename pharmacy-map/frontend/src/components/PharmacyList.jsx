@@ -14,7 +14,7 @@ function PharmacyList({
   const [items, setItems] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [search, setSearch] = useState("");
-  const [radius, setRadius] = useState(5);
+  const [radius, setRadius] = useState(3);
   const [sortByDistance, setSortByDistance] = useState(true);
 
   useEffect(() => {
@@ -115,6 +115,11 @@ function PharmacyList({
       return;
     }
 
+    if (!radius || radius <= 0) {
+      alert("⚠️ Vui lòng nhập bán kính hợp lệ!");
+      return;
+    }
+
     setRadiusKm(radius);
 
     const withDistance = searchedItems.map((item) => {
@@ -138,75 +143,178 @@ function PharmacyList({
     }
 
     setFiltered(nearby);
-    alert(`✅ Đã lọc ${nearby.length} nhà thuốc trong ${radius} km.`);
+    alert(`✅ Đã lọc ${nearby.length} nhà thuốc trong bán kính ${radius} km.`);
   };
+
+  const quickRadiusOptions = [1, 3, 5, 10];
 
   return (
     <div>
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 10,
-          gap: 6,
-          flexWrap: "wrap",
+          background: "#fff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 16,
+          padding: 14,
+          marginBottom: 12,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
         }}
       >
-        <button
-          onClick={handleGetLocation}
+        <div
           style={{
-            background: "#34d399",
-            color: "white",
-            border: "none",
-            padding: "6px 10px",
-            borderRadius: "6px",
-            cursor: "pointer",
+            display: "grid",
+            gridTemplateColumns: "1fr",
+            gap: 10,
+            marginBottom: 12,
           }}
         >
-          📍 Lấy vị trí
-        </button>
+          <button
+            onClick={handleGetLocation}
+            style={{
+              background: "#34d399",
+              color: "white",
+              border: "none",
+              padding: "10px 12px",
+              borderRadius: "10px",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "15px",
+            }}
+          >
+            📍 Lấy vị trí hiện tại
+          </button>
 
-        <input
-          type="number"
-          value={radius}
-          onChange={(e) => setRadius(Number(e.target.value))}
-          min={1}
-          max={50}
-          step={1}
+          <button
+            onClick={handleFilterNearby}
+            style={{
+              background: "#2563eb",
+              color: "white",
+              border: "none",
+              padding: "10px 12px",
+              borderRadius: "10px",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "15px",
+            }}
+          >
+            🚀 Lọc gần tôi
+          </button>
+        </div>
+
+        <div
           style={{
-            width: "70px",
-            textAlign: "center",
-            border: "1px solid #ccc",
-            borderRadius: "4px",
-            padding: "4px",
-          }}
-        />
-
-        <span style={{ fontSize: "14px" }}>km</span>
-
-        <button
-          onClick={handleFilterNearby}
-          style={{
-            background: "#007bff",
-            color: "white",
-            border: "none",
-            padding: "6px 10px",
-            borderRadius: "6px",
-            cursor: "pointer",
+            background: "#f8fafc",
+            border: "1px solid #e5e7eb",
+            borderRadius: 12,
+            padding: 12,
           }}
         >
-          🚀 Lọc gần tôi
-        </button>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#1f2937",
+              marginBottom: 4,
+            }}
+          >
+            Bán kính tìm kiếm
+          </div>
 
-        <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <input
-            type="checkbox"
-            checked={sortByDistance}
-            onChange={(e) => setSortByDistance(e.target.checked)}
-          />
-          Sắp xếp gần nhất
-        </label>
+          <div
+            style={{
+              fontSize: 12,
+              color: "#6b7280",
+              marginBottom: 10,
+              lineHeight: 1.5,
+            }}
+          >
+            Phạm vi lọc được tính từ vị trí hiện tại của bạn.
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 10,
+            }}
+          >
+            <input
+              type="number"
+              value={radius}
+              onChange={(e) => setRadius(Number(e.target.value))}
+              min={1}
+              max={50}
+              step={1}
+              style={{
+                width: "90px",
+                textAlign: "center",
+                border: "1px solid #d1d5db",
+                borderRadius: "10px",
+                padding: "8px 10px",
+                fontSize: "15px",
+                fontWeight: 600,
+                outline: "none",
+              }}
+            />
+            <span
+              style={{
+                fontSize: "14px",
+                fontWeight: 600,
+                color: "#374151",
+              }}
+            >
+              km
+            </span>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              marginBottom: 10,
+            }}
+          >
+            {quickRadiusOptions.map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setRadius(value)}
+                style={{
+                  border: radius === value ? "1px solid #2563eb" : "1px solid #d1d5db",
+                  background: radius === value ? "#eff6ff" : "#fff",
+                  color: radius === value ? "#2563eb" : "#374151",
+                  borderRadius: "999px",
+                  padding: "6px 12px",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: "13px",
+                }}
+              >
+                {value} km
+              </button>
+            ))}
+          </div>
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 14,
+              color: "#374151",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={sortByDistance}
+              onChange={(e) => setSortByDistance(e.target.checked)}
+            />
+            Sắp xếp nhà thuốc gần nhất lên trước
+          </label>
+        </div>
       </div>
 
       <input
@@ -217,31 +325,37 @@ function PharmacyList({
         style={{
           width: "100%",
           marginBottom: 10,
-          padding: "6px 8px",
-          border: "1px solid #ccc",
-          borderRadius: "6px",
+          padding: "10px 12px",
+          border: "1px solid #d1d5db",
+          borderRadius: "10px",
+          fontSize: "15px",
+          outline: "none",
         }}
       />
 
-      <p
+      <div
         style={{
-          fontWeight: "500",
+          fontWeight: 500,
           fontSize: "15px",
           color: "#333",
           margin: "6px 0 12px",
-          lineHeight: 1.6,
+          lineHeight: 1.8,
+          background: "#fff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 12,
+          padding: "10px 12px",
         }}
       >
         🗺️ Số nhà thuốc đang hiển thị trên bản đồ:{" "}
-        <span style={{ color: "#007bff", fontWeight: "600" }}>
+        <span style={{ color: "#2563eb", fontWeight: 700 }}>
           {visibleMapCount}
         </span>
         <br />
         📋 Số nhà thuốc trong danh sách:{" "}
-        <span style={{ color: "#16a34a", fontWeight: "600" }}>
+        <span style={{ color: "#16a34a", fontWeight: 700 }}>
           {filtered.length}
         </span>
-      </p>
+      </div>
 
       {filtered.length === 0 ? (
         <p style={{ color: "#999", fontStyle: "italic" }}>
@@ -264,28 +378,31 @@ function PharmacyList({
               }
               style={{
                 border: "1px solid #eee",
-                padding: "8px",
-                marginBottom: "8px",
-                borderRadius: "8px",
+                padding: "10px",
+                marginBottom: "10px",
+                borderRadius: "12px",
                 cursor: "pointer",
                 background: "#fff",
-                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                transition: "all 0.2s ease",
               }}
             >
-              <h4 style={{ color: "#007bff", marginBottom: 4 }}>
+              <h4 style={{ color: "#007bff", marginBottom: 6 }}>
                 {item.name || "Không có tên"}
               </h4>
 
-              <p style={{ margin: 0 }}>
+              <p style={{ margin: "0 0 4px 0", lineHeight: 1.5 }}>
                 📍 {item.address || "Không có địa chỉ"}
               </p>
 
-              <p style={{ margin: "4px 0" }}>
+              <p style={{ margin: "0 0 4px 0" }}>
                 ⭐ {item.rating ?? "Chưa có rating"}
               </p>
 
               {dist && (
-                <p style={{ margin: 0, color: "#555" }}>📏 {dist} km</p>
+                <p style={{ margin: 0, color: "#555", fontWeight: 500 }}>
+                  📏 {dist} km
+                </p>
               )}
             </div>
           );
