@@ -667,9 +667,10 @@ function MapView({
         />
 
         <RouteToPharmacy
-          userLocation={userLocation}
-          selectedPharmacy={routeTarget}
-        />
+  userLocation={userLocation}
+  selectedPharmacy={routeTarget}
+  onClearRoute={() => setRouteTarget(null)}
+/>
 
         <FlyToSelected selectedPharmacy={selectedPharmacy} />
         <FlyToArea
