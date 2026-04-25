@@ -433,25 +433,6 @@ function MapView({
         </div>
       )}
 
-      {!canDrawArea && (
-        <div
-          style={{
-            position: "absolute",
-            top: 16,
-            left: 70,
-            zIndex: 9999,
-            background: "rgba(255,255,255,0.95)",
-            padding: "8px 10px",
-            borderRadius: "10px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
-            fontSize: 13,
-            color: "#555",
-          }}
-        >
-          🔒 Chỉ company/admin được chọn vùng khảo sát
-        </div>
-      )}
-
       <MapContainer
         center={[16.05, 108.2]}
         zoom={6}
