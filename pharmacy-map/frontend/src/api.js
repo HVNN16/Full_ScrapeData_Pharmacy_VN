@@ -28,4 +28,25 @@ export const fetchPharmaciesList = async (params) => {
   return res.data;
 };
 
+// ===== SURVEY AREAS =====
+
+export const createSurveyArea = async (data) => {
+  const res = await api.post("/survey-areas", data);
+  return res.data;
+};
+
+export const getMySurveyAreas = async () => {
+  const res = await api.get("/survey-areas/my");
+  return res.data;
+};
+
+export const updateSurveyArea = async (id, data) => {
+  const res = await api.put(`/survey-areas/${id}`, data);
+  return res.data;
+};
+
+export const deleteSurveyArea = async (id) => {
+  const res = await api.delete(`/survey-areas/${id}`);
+  return res.data;
+};
 export default api;
