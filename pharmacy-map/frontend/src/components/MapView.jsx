@@ -21,6 +21,10 @@ import {
   getMySurveyAreas,
   deleteSurveyArea,
   updateSurveyArea,
+  getAdminSurveyUsers,
+  getAdminSurveyAreasByUser,
+  adminUpdateSurveyArea,
+  adminDeleteSurveyArea,
 } from "../api";
 import PharmacyMarkers from "./PharmacyMarkers";
 import "leaflet/dist/leaflet.css";
@@ -268,6 +272,9 @@ function MapView({
   const [selectedAreaId, setSelectedAreaId] = useState("");
   const [areaName, setAreaName] = useState("");
 
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState("");
+
   const [showPanel, setShowPanel] = useState(false);
   const [toast, setToast] = useState(null);
   const [panelPos, setPanelPos] = useState({ x: 92, y: 14 });
@@ -282,6 +289,7 @@ function MapView({
   const hasReportedInitialLoad = useRef(false);
 
   const role = localStorage.getItem("role");
+  const isAdmin = role === "admin";
   const canDrawArea = role === "company" || role === "admin";
 
   const isUsingPolygon =
@@ -313,9 +321,61 @@ function MapView({
     }
   }, [canDrawArea, showToast]);
 
+  const reloadAreasAfterChange = useCallback(async () => {
+    if (isAdmin && selectedUserId) {
+      const data = await getAdminSurveyAreasByUser(selectedUserId);
+      setSavedAreas(Array.isArray(data) ? data : []);
+    } else {
+      await loadSavedAreas();
+    }
+  }, [isAdmin, selectedUserId, loadSavedAreas]);
+
   useEffect(() => {
     loadSavedAreas();
   }, [loadSavedAreas]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const loadAdminUsers = async () => {
+      try {
+        const data = await getAdminSurveyUsers();
+        setAdminUsers(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Lỗi load danh sách user:", err);
+        showToast("Không tải được danh sách user", "error");
+      }
+    };
+
+    loadAdminUsers();
+  }, [isAdmin, showToast]);
+
+  const handleSelectUser = async (userId) => {
+    setSelectedUserId(userId);
+    setSelectedAreaId("");
+    setAreaName("");
+
+    if (featureGroupRef.current) {
+      featureGroupRef.current.clearLayers();
+    }
+
+    setPolygonCoords(null);
+    setReloadKey(Date.now());
+
+    if (!userId) {
+      await loadSavedAreas();
+      return;
+    }
+
+    try {
+      const data = await getAdminSurveyAreasByUser(userId);
+      setSavedAreas(Array.isArray(data) ? data : []);
+      showToast("Đã tải vùng của user", "success");
+    } catch (err) {
+      console.error("Lỗi load vùng theo user:", err);
+      showToast("Không tải được vùng của user", "error");
+    }
+  };
 
   useEffect(() => {
     const onMouseMove = (e) => {
@@ -437,12 +497,19 @@ function MapView({
         try {
           const nextPolygon = coordsToPolygonObject(editedCoords);
 
-          await updateSurveyArea(selectedAreaId, {
-            name: areaName || "Vùng khảo sát",
-            polygon: nextPolygon,
-          });
+          if (isAdmin && selectedUserId) {
+            await adminUpdateSurveyArea(selectedAreaId, {
+              name: areaName || "Vùng khảo sát",
+              polygon: nextPolygon,
+            });
+          } else {
+            await updateSurveyArea(selectedAreaId, {
+              name: areaName || "Vùng khảo sát",
+              polygon: nextPolygon,
+            });
+          }
 
-          await loadSavedAreas();
+          await reloadAreasAfterChange();
           showToast("Đã tự động lưu vùng sau khi sửa", "success");
         } catch (err) {
           console.error("Lỗi auto save vùng:", err);
@@ -452,7 +519,14 @@ function MapView({
         showToast("Đã sửa vùng tạm thời", "success");
       }
     },
-    [selectedAreaId, areaName, loadSavedAreas, showToast]
+    [
+      selectedAreaId,
+      areaName,
+      isAdmin,
+      selectedUserId,
+      reloadAreasAfterChange,
+      showToast,
+    ]
   );
 
   const handlePolygonDeleted = useCallback(() => {
@@ -477,10 +551,17 @@ function MapView({
 
     try {
       if (selectedAreaId) {
-        await updateSurveyArea(selectedAreaId, {
-          name: finalName,
-          polygon: polygonObject,
-        });
+        if (isAdmin && selectedUserId) {
+          await adminUpdateSurveyArea(selectedAreaId, {
+            name: finalName,
+            polygon: polygonObject,
+          });
+        } else {
+          await updateSurveyArea(selectedAreaId, {
+            name: finalName,
+            polygon: polygonObject,
+          });
+        }
 
         showToast("Đã cập nhật vùng đã lưu", "success");
       } else {
@@ -493,7 +574,7 @@ function MapView({
         showToast("Đã lưu vùng khảo sát", "success");
       }
 
-      await loadSavedAreas();
+      await reloadAreasAfterChange();
     } catch (err) {
       console.error("Lỗi lưu vùng:", err);
       showToast("Lưu vùng thất bại", "error");
@@ -534,7 +615,11 @@ function MapView({
     if (!ok) return;
 
     try {
-      await deleteSurveyArea(selectedAreaId);
+      if (isAdmin && selectedUserId) {
+        await adminDeleteSurveyArea(selectedAreaId);
+      } else {
+        await deleteSurveyArea(selectedAreaId);
+      }
 
       setSavedAreas((prev) =>
         prev.filter((item) => String(item.id) !== String(selectedAreaId))
@@ -687,23 +772,23 @@ function MapView({
           onClick={() => setShowPanel((prev) => !prev)}
           title="Vùng khảo sát"
           style={{
-  position: "absolute",
-  bottom: 160,     // 👈 cao hơn nút CSV
-  right: 20,       // 👈 thẳng hàng với CSV
-  zIndex: 9999,
-  width: 54,
-  height: 54,
-  borderRadius: "50%",
-  border: "3px solid white",
-  background: showPanel
-    ? "linear-gradient(135deg,#0f172a,#2563eb)"
-    : "linear-gradient(135deg,#2563eb,#06b6d4)",
-  color: "#fff",
-  fontSize: 24,
-  cursor: "pointer",
-  boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
-  transition: "all 0.2s ease",
-}}
+            position: "absolute",
+            bottom: 160,
+            right: 20,
+            zIndex: 9999,
+            width: 54,
+            height: 54,
+            borderRadius: "50%",
+            border: "3px solid white",
+            background: showPanel
+              ? "linear-gradient(135deg,#0f172a,#2563eb)"
+              : "linear-gradient(135deg,#2563eb,#06b6d4)",
+            color: "#fff",
+            fontSize: 24,
+            cursor: "pointer",
+            boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
+            transition: "all 0.2s ease",
+          }}
         >
           🧭
         </button>
@@ -712,20 +797,20 @@ function MapView({
       {canDrawArea && showPanel && (
         <div
           style={{
-  position: "absolute",
-  top: panelPos.y,
-  left: panelPos.x,
-  zIndex: 9999,
-  width: 300,
-  background: "rgba(255,255,255,0.85)",
-  backdropFilter: "blur(12px)",  // 👈 kính mờ xịn
-  borderRadius: 20,
-  boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
-  overflow: "hidden",
-  fontSize: 13,
-  border: "1px solid rgba(255,255,255,0.3)",
-  animation: "surveyPanelIn 0.25s ease-out",
-}}
+            position: "absolute",
+            top: panelPos.y,
+            left: panelPos.x,
+            zIndex: 9999,
+            width: 300,
+            background: "rgba(255,255,255,0.85)",
+            backdropFilter: "blur(12px)",
+            borderRadius: 20,
+            boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
+            overflow: "hidden",
+            fontSize: 13,
+            border: "1px solid rgba(255,255,255,0.3)",
+            animation: "surveyPanelIn 0.25s ease-out",
+          }}
         >
           <div
             onMouseDown={(e) => {
@@ -744,7 +829,7 @@ function MapView({
               userSelect: "none",
             }}
           >
-            <b>🧭 Vùng khảo sát</b>
+            <b>{isAdmin ? "🛡️ Admin vùng khảo sát" : "🧭 Vùng khảo sát"}</b>
 
             <button
               onMouseDown={(e) => e.stopPropagation()}
@@ -765,6 +850,28 @@ function MapView({
           </div>
 
           <div style={{ padding: 12 }}>
+            {isAdmin && (
+              <select
+                value={selectedUserId}
+                onChange={(e) => handleSelectUser(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "9px",
+                  borderRadius: 10,
+                  border: "1px solid #d8e0ea",
+                  marginBottom: 9,
+                  outline: "none",
+                }}
+              >
+                <option value="">-- Admin: chọn user/company --</option>
+                {adminUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.fullname || u.email} ({u.role}) - {u.area_count || 0} vùng
+                  </option>
+                ))}
+              </select>
+            )}
+
             <select
               value={selectedAreaId}
               onChange={(e) => handleSelectSavedArea(e.target.value)}
@@ -826,8 +933,8 @@ function MapView({
                       fontWeight: 700,
                     }}
                   >
-                    ✅ Đang mở vùng đã lưu. Khi bấm Edit và lưu thay đổi,
-                    hệ thống sẽ tự cập nhật.
+                    ✅ Đang mở vùng đã lưu. Khi bấm Edit và lưu thay đổi, hệ
+                    thống sẽ tự cập nhật.
                   </div>
                 )}
 
@@ -903,8 +1010,9 @@ function MapView({
                   borderRadius: 12,
                 }}
               >
-                Dùng công cụ vẽ bên trái bản đồ để khoanh vùng, hoặc chọn vùng
-                đã lưu để mở lại.
+                {isAdmin
+                  ? "Admin có thể chọn user/company để xem vùng họ đã tạo, hoặc vẽ vùng mới."
+                  : "Dùng công cụ vẽ bên trái bản đồ để khoanh vùng, hoặc chọn vùng đã lưu để mở lại."}
               </div>
             )}
           </div>
