@@ -1,8 +1,31 @@
 import { pool } from "../db.js";
 
+const buildPharmacyProperties = `
+  jsonb_build_object(
+    'id', id,
+    'name', name,
+    'address', address,
+    'province', province,
+    'district', district,
+    'phone', phone,
+    'status', status,
+    'rating', rating,
+    'image', image,
+    'product_groups', product_groups
+  )
+`;
+
 export const getPharmaciesGeoJSON = async (req, res) => {
   try {
-    const { province, district, status, rating_min, bbox } = req.query;
+    const {
+      province,
+      district,
+      status,
+      rating_min,
+      bbox,
+      limit = 3000,
+      mode = "",
+    } = req.query;
 
     const where = [];
     const params = [];
@@ -50,34 +73,17 @@ export const getPharmaciesGeoJSON = async (req, res) => {
       );
     }
 
+    const safeLimit = Math.min(Number(limit) || 3000, 5000);
+    params.push(safeLimit);
+    const limitIndex = params.length;
+
+    params.push(mode);
+    const modeIndex = params.length;
+
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
     const sql = `
-      SELECT jsonb_build_object(
-        'type', 'FeatureCollection',
-        'features', COALESCE(
-          jsonb_agg(
-            jsonb_build_object(
-              'type', 'Feature',
-              'geometry', ST_AsGeoJSON(row.geom)::jsonb,
-              'properties', jsonb_build_object(
-                'id', row.id,
-                'name', row.name,
-                'address', row.address,
-                'province', row.province,
-                'district', row.district,
-                'phone', row.phone,
-                'status', row.status,
-                'rating', row.rating,
-                'image', row.image,
-                'product_groups', row.product_groups
-              )
-            )
-          ),
-          '[]'::jsonb
-        )
-      ) AS fc
-      FROM (
+      WITH base AS (
         SELECT
           id,
           name,
@@ -92,9 +98,40 @@ export const getPharmaciesGeoJSON = async (req, res) => {
           geom
         FROM pharmacy_stores_cleaned
         ${whereSql}
-        ORDER BY rating DESC NULLS LAST
-        LIMIT 25000
-      ) AS row;
+      ),
+      ranked AS (
+        SELECT
+          *,
+          ROW_NUMBER() OVER (
+            PARTITION BY COALESCE(province, 'unknown')
+            ORDER BY rating DESC NULLS LAST, id ASC
+          ) AS rn
+        FROM base
+      ),
+      limited AS (
+        SELECT *
+        FROM ranked
+        ORDER BY
+          CASE WHEN $${modeIndex} = 'overview' THEN rn ELSE 1 END ASC,
+          province ASC NULLS LAST,
+          rating DESC NULLS LAST,
+          id ASC
+        LIMIT $${limitIndex}
+      )
+      SELECT jsonb_build_object(
+        'type', 'FeatureCollection',
+        'features', COALESCE(
+          jsonb_agg(
+            jsonb_build_object(
+              'type', 'Feature',
+              'geometry', ST_AsGeoJSON(geom)::jsonb,
+              'properties', ${buildPharmacyProperties}
+            )
+          ),
+          '[]'::jsonb
+        )
+      ) AS fc
+      FROM limited;
     `;
 
     const { rows } = await pool.query(sql, params);
@@ -116,7 +153,14 @@ export const getPharmaciesGeoJSON = async (req, res) => {
 
 export const getPharmaciesList = async (req, res) => {
   try {
-    const { province, district, status, rating_min, limit = 10000 } = req.query;
+    const {
+      province,
+      district,
+      status,
+      rating_min,
+      search,
+      limit = 10000,
+    } = req.query;
 
     const where = [];
     const params = [];
@@ -141,11 +185,22 @@ export const getPharmaciesList = async (req, res) => {
       where.push(`rating >= $${params.length}`);
     }
 
+    if (search) {
+      params.push(`%${search}%`);
+      where.push(`(
+        name ILIKE $${params.length}
+        OR address ILIKE $${params.length}
+        OR province ILIKE $${params.length}
+        OR district ILIKE $${params.length}
+      )`);
+    }
+
     where.push(`geom IS NOT NULL`);
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    params.push(Number(limit));
+    const safeLimit = Math.min(Number(limit) || 10000, 10000);
+    params.push(safeLimit);
 
     const sql = `
       SELECT
@@ -163,7 +218,7 @@ export const getPharmaciesList = async (req, res) => {
         ST_Y(geom) AS lat
       FROM pharmacy_stores_cleaned
       ${whereSql}
-      ORDER BY rating DESC NULLS LAST
+      ORDER BY rating DESC NULLS LAST, id ASC
       LIMIT $${params.length};
     `;
 
@@ -296,6 +351,8 @@ export const updatePharmacy = async (req, res) => {
         rating = COALESCE($7, rating),
         image = COALESCE($8, image),
         product_groups = COALESCE($9::jsonb, product_groups),
+        is_surveyed = TRUE,
+        surveyed_at = COALESCE(surveyed_at, NOW()),
         updated_at = NOW()
       WHERE id = $10
       RETURNING
@@ -309,6 +366,9 @@ export const updatePharmacy = async (req, res) => {
         rating,
         image,
         product_groups,
+        is_surveyed,
+        surveyed_at,
+        updated_at,
         ST_X(geom) AS lon,
         ST_Y(geom) AS lat;
     `;
