@@ -1,15 +1,22 @@
 import express from "express";
+
 import {
   getPharmaciesGeoJSON,
   getPharmaciesList,
   getHeatmap,
+  updatePharmacy,
 } from "../controllers/pharmacyGeoController.js";
+
 import { getProvinces } from "../controllers/pharmacyDropdownController.js";
+
 import {
   getProvinceStats,
   getDistrictStats,
 } from "../controllers/pharmacyStatsController.js";
+
 import { exportPharmaciesCSV } from "../controllers/exportController.js";
+import { getRoute } from "../controllers/routeController.js";
+
 import {
   verifyToken,
   verifyExportRole,
@@ -23,8 +30,13 @@ router.get("/provinces", getProvinces);
 router.get("/heat", getHeatmap);
 router.get("/stats/province", getProvinceStats);
 router.get("/stats/district", getDistrictStats);
+router.get("/route", getRoute);
 
-// admin + company đều export được
+// Tạm thời mở để Flutter test cập nhật.
+// Sau khi chạy ổn, nên đổi thành:
+// router.put("/pharmacies/:id", verifyToken, updatePharmacy);
+router.put("/pharmacies/:id", updatePharmacy);
+
 router.get("/export-csv", verifyToken, verifyExportRole, exportPharmaciesCSV);
 
 export default router;
