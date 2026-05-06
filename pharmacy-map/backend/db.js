@@ -35,4 +35,8 @@ if (process.env.DATABASE_URL) {
   });
 }
 
+console.log(
+  "✅ DB đang dùng:",
+  process.env.DATABASE_URL ? "NEON" : "LOCAL"
+);
 export { pool };

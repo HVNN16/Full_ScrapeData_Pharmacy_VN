@@ -1,32 +1,39 @@
-import express from "express";
-import {
-  getPharmaciesGeoJSON,
-  getPharmaciesList,
-  getHeatmap,
-} from "../controllers/pharmacyGeoController.js";
-import { getProvinces } from "../controllers/pharmacyDropdownController.js";
-import {
-  getProvinceStats,
-  getDistrictStats,
-} from "../controllers/pharmacyStatsController.js";
-import { exportPharmaciesCSV } from "../controllers/exportController.js";
-import { getRoute } from "../controllers/routeController.js";
-import {
-  verifyToken,
-  verifyExportRole,
-} from "../middleware/authMiddleware.js";
+import axios from "axios";
 
-const router = express.Router();
+export const getRoute = async (req, res) => {
+  try {
+    const { startLat, startLng, endLat, endLng } = req.query;
 
-router.get("/pharmacies", getPharmaciesList);
-router.get("/pharmacies.geojson", getPharmaciesGeoJSON);
-router.get("/provinces", getProvinces);
-router.get("/heat", getHeatmap);
-router.get("/stats/province", getProvinceStats);
-router.get("/stats/district", getDistrictStats);
-router.get("/route", getRoute);
+    if (!startLat || !startLng || !endLat || !endLng) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu tọa độ bắt đầu hoặc kết thúc",
+      });
+    }
 
-// admin + company đều export được
-router.get("/export-csv", verifyToken, verifyExportRole, exportPharmaciesCSV);
+    const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
 
-export default router;
+    const response = await axios.get(url);
+    const route = response.data?.routes?.[0];
+
+    if (!route) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy tuyến đường",
+      });
+    }
+
+    return res.json({
+      success: true,
+      distance: route.distance,
+      duration: route.duration,
+      coordinates: route.geometry.coordinates,
+    });
+  } catch (err) {
+    console.error("GET /route error:", err.message);
+    return res.status(500).json({
+      success: false,
+      message: "Không lấy được tuyến đường",
+    });
+  }
+};
