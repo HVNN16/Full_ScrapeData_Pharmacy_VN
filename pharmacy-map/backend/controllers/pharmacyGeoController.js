@@ -29,25 +29,25 @@ export const getPharmaciesGeoJSON = async (req, res) => {
 
     where.push(`geom IS NOT NULL`);
 
-    if (bbox) {
-      const [minx, miny, maxx, maxy] = bbox.split(",").map(Number);
-
-      const isValidBbox =
-        [minx, miny, maxx, maxy].every((n) => Number.isFinite(n)) &&
-        minx < maxx &&
-        miny < maxy;
-
-      if (isValidBbox) {
-        params.push(minx, miny, maxx, maxy);
-        where.push(
-          `geom && ST_MakeEnvelope($${params.length - 3}, $${params.length - 2}, $${params.length - 1}, $${params.length}, 4326)`
-        );
-      }
-    } else {
+    if (!bbox) {
       return res.json({
         type: "FeatureCollection",
         features: [],
       });
+    }
+
+    const [minx, miny, maxx, maxy] = bbox.split(",").map(Number);
+
+    const isValidBbox =
+      [minx, miny, maxx, maxy].every((n) => Number.isFinite(n)) &&
+      minx < maxx &&
+      miny < maxy;
+
+    if (isValidBbox) {
+      params.push(minx, miny, maxx, maxy);
+      where.push(
+        `geom && ST_MakeEnvelope($${params.length - 3}, $${params.length - 2}, $${params.length - 1}, $${params.length}, 4326)`
+      );
     }
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
@@ -295,7 +295,8 @@ export const updatePharmacy = async (req, res) => {
         status = COALESCE(NULLIF($6, ''), status),
         rating = COALESCE($7, rating),
         image = COALESCE($8, image),
-        product_groups = COALESCE($9::jsonb, product_groups)
+        product_groups = COALESCE($9::jsonb, product_groups),
+        updated_at = NOW()
       WHERE id = $10
       RETURNING
         id,

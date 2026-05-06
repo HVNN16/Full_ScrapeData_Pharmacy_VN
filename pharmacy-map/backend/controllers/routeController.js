@@ -1,39 +1,47 @@
-import axios from "axios";
-
 export const getRoute = async (req, res) => {
   try {
     const { startLat, startLng, endLat, endLng } = req.query;
 
     if (!startLat || !startLng || !endLat || !endLng) {
       return res.status(400).json({
-        success: false,
-        message: "Thiếu tọa độ bắt đầu hoặc kết thúc",
+        message: "Thiếu tọa độ startLat, startLng, endLat, endLng",
       });
     }
 
-    const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+    const sLat = Number(startLat);
+    const sLng = Number(startLng);
+    const eLat = Number(endLat);
+    const eLng = Number(endLng);
 
-    const response = await axios.get(url);
-    const route = response.data?.routes?.[0];
-
-    if (!route) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy tuyến đường",
+    if (
+      !Number.isFinite(sLat) ||
+      !Number.isFinite(sLng) ||
+      !Number.isFinite(eLat) ||
+      !Number.isFinite(eLng)
+    ) {
+      return res.status(400).json({
+        message: "Tọa độ không hợp lệ",
       });
     }
 
-    return res.json({
-      success: true,
-      distance: route.distance,
-      duration: route.duration,
-      coordinates: route.geometry.coordinates,
-    });
+    const url = `https://router.project-osrm.org/route/v1/driving/${sLng},${sLat};${eLng},${eLat}?overview=full&geometries=geojson&steps=true`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        message: "Không lấy được tuyến đường từ OSRM",
+      });
+    }
+
+    const data = await response.json();
+
+    res.json(data);
   } catch (err) {
-    console.error("GET /route error:", err.message);
-    return res.status(500).json({
-      success: false,
-      message: "Không lấy được tuyến đường",
+    console.error("❌ Lỗi /route:", err);
+    res.status(500).json({
+      message: "Lỗi server khi lấy tuyến đường",
+      error: err.message,
     });
   }
 };
