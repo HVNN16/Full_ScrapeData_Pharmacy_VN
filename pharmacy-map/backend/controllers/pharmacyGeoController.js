@@ -342,8 +342,17 @@ export const updatePharmacy = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { name, address, phone, status, rating, image_url, product_groups } =
-      req.body;
+    const {
+      name,
+      address,
+      province,
+      district,
+      phone,
+      status,
+      rating,
+      image_url,
+      product_groups,
+    } = req.body;
 
     if (!id) {
       return res.status(400).json({
@@ -356,15 +365,17 @@ export const updatePharmacy = async (req, res) => {
       SET
         name = COALESCE($1, name),
         address = COALESCE($2, address),
-        phone = COALESCE($3, phone),
-        status = COALESCE($4, status),
-        rating = COALESCE($5, rating),
-        image_url = COALESCE($6, image_url),
-        product_groups = COALESCE($7::jsonb, product_groups),
+        province = COALESCE($3, province),
+        district = COALESCE($4, district),
+        phone = COALESCE($5, phone),
+        status = COALESCE($6, status),
+        rating = COALESCE($7, rating),
+        image_url = COALESCE($8, image_url),
+        product_groups = COALESCE($9::jsonb, product_groups),
         is_surveyed = TRUE,
         surveyed_at = NOW(),
         updated_at = NOW()
-      WHERE id = $8
+      WHERE id = $10
       RETURNING 
         id,
         name,
@@ -386,6 +397,8 @@ export const updatePharmacy = async (req, res) => {
     const values = [
       name === undefined || name === "" ? null : name,
       address === undefined || address === "" ? null : address,
+      province === undefined || province === "" ? null : province,
+      district === undefined || district === "" ? null : district,
       phone === undefined || phone === "" ? null : phone,
       status === undefined || status === "" ? null : status,
       rating === undefined || rating === null || rating === ""
