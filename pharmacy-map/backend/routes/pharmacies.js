@@ -5,6 +5,7 @@ import {
   getPharmaciesList,
   getHeatmap,
   updatePharmacy,
+  getPharmacyCount,
 } from "../controllers/pharmacyGeoController.js";
 
 import { getProvinces } from "../controllers/pharmacyDropdownController.js";
@@ -26,6 +27,7 @@ const router = express.Router();
 
 router.get("/pharmacies", getPharmaciesList);
 router.get("/pharmacies.geojson", getPharmaciesGeoJSON);
+router.get("/pharmacies/count", getPharmacyCount);
 
 router.get("/provinces", getProvinces);
 
@@ -37,9 +39,6 @@ router.get("/stats/district", getDistrictStats);
 
 router.get("/route", getRoute);
 
-// Tạm thời mở để Flutter test cập nhật.
-// Sau khi ổn và Flutter đã gửi token thì đổi thành:
-// router.put("/pharmacies/:id", verifyToken, updatePharmacy);
 router.put("/pharmacies/:id", updatePharmacy);
 
 router.get("/export-csv", verifyToken, verifyExportRole, exportPharmaciesCSV);
