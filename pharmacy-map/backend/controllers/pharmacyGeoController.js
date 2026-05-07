@@ -2,6 +2,9 @@ import { pool } from "../db.js";
 
 const TABLE_NAME = "pharmacy_stores_cleaned";
 
+const LAT_COL = "latitude";
+const LNG_COL = "longitude";
+
 const parseLimit = (value) => {
   const n = parseInt(value, 10);
   return Number.isInteger(n) && n > 0 ? n : null;
@@ -23,14 +26,7 @@ const parseBBox = (bbox) => {
 
 export const getPharmaciesGeoJSON = async (req, res) => {
   try {
-    const {
-      bbox,
-      mode,
-      search,
-      province,
-      district,
-      rating_min,
-    } = req.query;
+    const { bbox, mode, search, province, district, rating_min } = req.query;
 
     const limit = parseLimit(req.query.limit);
     const parsedBBox = parseBBox(bbox);
@@ -39,16 +35,16 @@ export const getPharmaciesGeoJSON = async (req, res) => {
     let index = 1;
 
     let whereSql = `
-      WHERE lat IS NOT NULL
-        AND lng IS NOT NULL
-        AND lat != 0
-        AND lng != 0
+      WHERE ${LAT_COL} IS NOT NULL
+        AND ${LNG_COL} IS NOT NULL
+        AND ${LAT_COL} != 0
+        AND ${LNG_COL} != 0
     `;
 
     if (parsedBBox) {
       whereSql += `
-        AND lng BETWEEN $${index++} AND $${index++}
-        AND lat BETWEEN $${index++} AND $${index++}
+        AND ${LNG_COL} BETWEEN $${index++} AND $${index++}
+        AND ${LAT_COL} BETWEEN $${index++} AND $${index++}
       `;
 
       values.push(
@@ -100,12 +96,12 @@ export const getPharmaciesGeoJSON = async (req, res) => {
           phone,
           status,
           rating,
-          image_url,
+          COALESCE(image_url, image) AS image_url,
           product_groups,
           is_surveyed,
           surveyed_at,
-          lat,
-          lng
+          ${LAT_COL} AS lat,
+          ${LNG_COL} AS lng
         FROM (
           SELECT
             id,
@@ -116,14 +112,15 @@ export const getPharmaciesGeoJSON = async (req, res) => {
             phone,
             status,
             rating,
+            image,
             image_url,
             product_groups,
             is_surveyed,
             surveyed_at,
-            lat,
-            lng,
+            ${LAT_COL},
+            ${LNG_COL},
             ROW_NUMBER() OVER (
-              PARTITION BY FLOOR(lat * 5), FLOOR(lng * 5)
+              PARTITION BY FLOOR(${LAT_COL} * 5), FLOOR(${LNG_COL} * 5)
               ORDER BY id ASC
             ) AS rn
           FROM ${TABLE_NAME}
@@ -145,12 +142,12 @@ export const getPharmaciesGeoJSON = async (req, res) => {
           phone,
           status,
           rating,
-          image_url,
+          COALESCE(image_url, image) AS image_url,
           product_groups,
           is_surveyed,
           surveyed_at,
-          lat,
-          lng
+          ${LAT_COL} AS lat,
+          ${LNG_COL} AS lng
         FROM ${TABLE_NAME}
         ${whereSql}
         ORDER BY id ASC
@@ -203,12 +200,7 @@ export const getPharmaciesGeoJSON = async (req, res) => {
 
 export const getPharmaciesList = async (req, res) => {
   try {
-    const {
-      search,
-      province,
-      district,
-      rating_min,
-    } = req.query;
+    const { search, province, district, rating_min } = req.query;
 
     const limit = parseLimit(req.query.limit);
 
@@ -225,17 +217,17 @@ export const getPharmaciesList = async (req, res) => {
         phone,
         status,
         rating,
-        image_url,
+        COALESCE(image_url, image) AS image_url,
         product_groups,
         is_surveyed,
         surveyed_at,
-        lat,
-        lng
+        ${LAT_COL} AS lat,
+        ${LNG_COL} AS lng
       FROM ${TABLE_NAME}
-      WHERE lat IS NOT NULL
-        AND lng IS NOT NULL
-        AND lat != 0
-        AND lng != 0
+      WHERE ${LAT_COL} IS NOT NULL
+        AND ${LNG_COL} IS NOT NULL
+        AND ${LAT_COL} != 0
+        AND ${LNG_COL} != 0
     `;
 
     if (search) {
@@ -287,25 +279,27 @@ export const getPharmaciesList = async (req, res) => {
 
 export const getHeatmap = async (req, res) => {
   try {
-    const { bbox } = req.query;
+    const { bbox, province, rating_min } = req.query;
     const parsedBBox = parseBBox(bbox);
 
     const values = [];
     let index = 1;
 
     let sql = `
-      SELECT lat, lng
+      SELECT 
+        ${LAT_COL} AS lat,
+        ${LNG_COL} AS lng
       FROM ${TABLE_NAME}
-      WHERE lat IS NOT NULL
-        AND lng IS NOT NULL
-        AND lat != 0
-        AND lng != 0
+      WHERE ${LAT_COL} IS NOT NULL
+        AND ${LNG_COL} IS NOT NULL
+        AND ${LAT_COL} != 0
+        AND ${LNG_COL} != 0
     `;
 
     if (parsedBBox) {
       sql += `
-        AND lng BETWEEN $${index++} AND $${index++}
-        AND lat BETWEEN $${index++} AND $${index++}
+        AND ${LNG_COL} BETWEEN $${index++} AND $${index++}
+        AND ${LAT_COL} BETWEEN $${index++} AND $${index++}
       `;
 
       values.push(
@@ -314,6 +308,16 @@ export const getHeatmap = async (req, res) => {
         parsedBBox.minLat,
         parsedBBox.maxLat
       );
+    }
+
+    if (province) {
+      sql += ` AND province = $${index++}`;
+      values.push(province);
+    }
+
+    if (rating_min) {
+      sql += ` AND rating >= $${index++}`;
+      values.push(Number(rating_min));
     }
 
     const { rows } = await pool.query(sql, values);
@@ -338,15 +342,8 @@ export const updatePharmacy = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const {
-      name,
-      address,
-      phone,
-      status,
-      rating,
-      image_url,
-      product_groups,
-    } = req.body;
+    const { name, address, phone, status, rating, image_url, product_groups } =
+      req.body;
 
     if (!id) {
       return res.status(400).json({
@@ -365,7 +362,8 @@ export const updatePharmacy = async (req, res) => {
         image_url = COALESCE($6, image_url),
         product_groups = COALESCE($7::jsonb, product_groups),
         is_surveyed = TRUE,
-        surveyed_at = NOW()
+        surveyed_at = NOW(),
+        updated_at = NOW()
       WHERE id = $8
       RETURNING 
         id,
@@ -376,12 +374,13 @@ export const updatePharmacy = async (req, res) => {
         phone,
         status,
         rating,
-        image_url,
+        COALESCE(image_url, image) AS image_url,
         product_groups,
         is_surveyed,
         surveyed_at,
-        lat,
-        lng;
+        updated_at,
+        ${LAT_COL} AS lat,
+        ${LNG_COL} AS lng;
     `;
 
     const values = [
@@ -393,9 +392,7 @@ export const updatePharmacy = async (req, res) => {
         ? null
         : Number(rating),
       image_url === undefined || image_url === "" ? null : image_url,
-      Array.isArray(product_groups)
-        ? JSON.stringify(product_groups)
-        : null,
+      Array.isArray(product_groups) ? JSON.stringify(product_groups) : null,
       id,
     ];
 
