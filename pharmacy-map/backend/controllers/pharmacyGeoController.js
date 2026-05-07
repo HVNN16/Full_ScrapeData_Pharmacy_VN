@@ -1,90 +1,97 @@
 import { pool } from "../db.js";
 
-const buildPharmacyProperties = `
-  jsonb_build_object(
-    'id', id,
-    'name', name,
-    'address', address,
-    'province', province,
-    'district', district,
-    'phone', phone,
-    'status', status,
-    'rating', rating,
-    'image', image,
-    'product_groups', product_groups
-  )
-`;
+const TABLE_NAME = "pharmacy_stores_cleaned";
+
+const parseLimit = (value) => {
+  const n = parseInt(value, 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
+
+const parseBBox = (bbox) => {
+  if (!bbox) return null;
+
+  const parts = bbox.split(",").map(Number);
+
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) {
+    return null;
+  }
+
+  const [minLng, minLat, maxLng, maxLat] = parts;
+
+  return { minLng, minLat, maxLng, maxLat };
+};
 
 export const getPharmaciesGeoJSON = async (req, res) => {
   try {
     const {
+      bbox,
+      mode,
+      search,
       province,
       district,
-      status,
       rating_min,
-      bbox,
-      limit = 3000,
-      mode = "",
     } = req.query;
 
-    const where = [];
-    const params = [];
+    const limit = parseLimit(req.query.limit);
+    const parsedBBox = parseBBox(bbox);
 
-    if (province) {
-      params.push(`%${province}%`);
-      where.push(`province ILIKE $${params.length}`);
-    }
+    const values = [];
+    let index = 1;
 
-    if (district) {
-      params.push(`%${district}%`);
-      where.push(`district ILIKE $${params.length}`);
-    }
+    let whereSql = `
+      WHERE lat IS NOT NULL
+        AND lng IS NOT NULL
+        AND lat != 0
+        AND lng != 0
+    `;
 
-    if (status) {
-      params.push(status);
-      where.push(`status = $${params.length}`);
-    }
+    if (parsedBBox) {
+      whereSql += `
+        AND lng BETWEEN $${index++} AND $${index++}
+        AND lat BETWEEN $${index++} AND $${index++}
+      `;
 
-    if (rating_min) {
-      params.push(Number(rating_min));
-      where.push(`rating >= $${params.length}`);
-    }
-
-    where.push(`geom IS NOT NULL`);
-
-    if (!bbox) {
-      return res.json({
-        type: "FeatureCollection",
-        features: [],
-      });
-    }
-
-    const [minx, miny, maxx, maxy] = bbox.split(",").map(Number);
-
-    const isValidBbox =
-      [minx, miny, maxx, maxy].every((n) => Number.isFinite(n)) &&
-      minx < maxx &&
-      miny < maxy;
-
-    if (isValidBbox) {
-      params.push(minx, miny, maxx, maxy);
-      where.push(
-        `geom && ST_MakeEnvelope($${params.length - 3}, $${params.length - 2}, $${params.length - 1}, $${params.length}, 4326)`
+      values.push(
+        parsedBBox.minLng,
+        parsedBBox.maxLng,
+        parsedBBox.minLat,
+        parsedBBox.maxLat
       );
     }
 
-    const safeLimit = Math.min(Number(limit) || 3000, 5000);
-    params.push(safeLimit);
-    const limitIndex = params.length;
+    if (search) {
+      whereSql += `
+        AND (
+          LOWER(name) LIKE LOWER($${index})
+          OR LOWER(address) LIKE LOWER($${index})
+          OR LOWER(province) LIKE LOWER($${index})
+          OR LOWER(district) LIKE LOWER($${index})
+        )
+      `;
+      values.push(`%${search}%`);
+      index++;
+    }
 
-    params.push(mode);
-    const modeIndex = params.length;
+    if (province) {
+      whereSql += ` AND province = $${index++}`;
+      values.push(province);
+    }
 
-    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    if (district) {
+      whereSql += ` AND district = $${index++}`;
+      values.push(district);
+    }
 
-    const sql = `
-      WITH base AS (
-        SELECT
+    if (rating_min) {
+      whereSql += ` AND rating >= $${index++}`;
+      values.push(Number(rating_min));
+    }
+
+    let sql;
+
+    if (mode === "overview" && limit) {
+      sql = `
+        SELECT 
           id,
           name,
           address,
@@ -93,60 +100,103 @@ export const getPharmaciesGeoJSON = async (req, res) => {
           phone,
           status,
           rating,
-          image,
+          image_url,
           product_groups,
-          geom
-        FROM pharmacy_stores_cleaned
+          is_surveyed,
+          surveyed_at,
+          lat,
+          lng
+        FROM (
+          SELECT
+            id,
+            name,
+            address,
+            province,
+            district,
+            phone,
+            status,
+            rating,
+            image_url,
+            product_groups,
+            is_surveyed,
+            surveyed_at,
+            lat,
+            lng,
+            ROW_NUMBER() OVER (
+              PARTITION BY FLOOR(lat * 5), FLOOR(lng * 5)
+              ORDER BY id ASC
+            ) AS rn
+          FROM ${TABLE_NAME}
+          ${whereSql}
+        ) AS spread_data
+        ORDER BY rn ASC, lat ASC, lng ASC
+        LIMIT $${index++}
+      `;
+
+      values.push(limit);
+    } else {
+      sql = `
+        SELECT 
+          id,
+          name,
+          address,
+          province,
+          district,
+          phone,
+          status,
+          rating,
+          image_url,
+          product_groups,
+          is_surveyed,
+          surveyed_at,
+          lat,
+          lng
+        FROM ${TABLE_NAME}
         ${whereSql}
-      ),
-      ranked AS (
-        SELECT
-          *,
-          ROW_NUMBER() OVER (
-            PARTITION BY COALESCE(province, 'unknown')
-            ORDER BY rating DESC NULLS LAST, id ASC
-          ) AS rn
-        FROM base
-      ),
-      limited AS (
-        SELECT *
-        FROM ranked
-        ORDER BY
-          CASE WHEN $${modeIndex} = 'overview' THEN rn ELSE 1 END ASC,
-          province ASC NULLS LAST,
-          rating DESC NULLS LAST,
-          id ASC
-        LIMIT $${limitIndex}
-      )
-      SELECT jsonb_build_object(
-        'type', 'FeatureCollection',
-        'features', COALESCE(
-          jsonb_agg(
-            jsonb_build_object(
-              'type', 'Feature',
-              'geometry', ST_AsGeoJSON(geom)::jsonb,
-              'properties', ${buildPharmacyProperties}
-            )
-          ),
-          '[]'::jsonb
-        )
-      ) AS fc
-      FROM limited;
-    `;
+        ORDER BY id ASC
+      `;
 
-    const { rows } = await pool.query(sql, params);
-
-    res.json(
-      rows[0]?.fc || {
-        type: "FeatureCollection",
-        features: [],
+      if (limit) {
+        sql += ` LIMIT $${index++}`;
+        values.push(limit);
       }
-    );
+    }
+
+    const { rows } = await pool.query(sql, values);
+
+    const features = rows
+      .filter((row) => row.id && row.lat && row.lng)
+      .map((row) => ({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [Number(row.lng), Number(row.lat)],
+        },
+        properties: {
+          id: row.id,
+          name: row.name || "",
+          address: row.address || "",
+          province: row.province || "",
+          district: row.district || "",
+          phone: row.phone || "",
+          status: row.status || "",
+          rating: row.rating === null ? null : Number(row.rating),
+          image_url: row.image_url || "",
+          product_groups: row.product_groups || [],
+          is_surveyed: row.is_surveyed || false,
+          surveyed_at: row.surveyed_at || null,
+        },
+      }));
+
+    res.json({
+      type: "FeatureCollection",
+      features,
+    });
   } catch (err) {
-    console.error("❌ Lỗi /pharmacies.geojson:", err);
+    console.error("❌ Lỗi getPharmaciesGeoJSON:", err);
     res.status(500).json({
-      error: "server_error",
-      message: err.message,
+      message: "Lỗi server khi lấy GeoJSON nhà thuốc",
+      error: err.message,
     });
   }
 };
@@ -154,56 +204,19 @@ export const getPharmaciesGeoJSON = async (req, res) => {
 export const getPharmaciesList = async (req, res) => {
   try {
     const {
+      search,
       province,
       district,
-      status,
       rating_min,
-      search,
-      limit = 10000,
     } = req.query;
 
-    const where = [];
-    const params = [];
+    const limit = parseLimit(req.query.limit);
 
-    if (province) {
-      params.push(`%${province}%`);
-      where.push(`province ILIKE $${params.length}`);
-    }
+    const values = [];
+    let index = 1;
 
-    if (district) {
-      params.push(`%${district}%`);
-      where.push(`district ILIKE $${params.length}`);
-    }
-
-    if (status) {
-      params.push(status);
-      where.push(`status = $${params.length}`);
-    }
-
-    if (rating_min) {
-      params.push(Number(rating_min));
-      where.push(`rating >= $${params.length}`);
-    }
-
-    if (search) {
-      params.push(`%${search}%`);
-      where.push(`(
-        name ILIKE $${params.length}
-        OR address ILIKE $${params.length}
-        OR province ILIKE $${params.length}
-        OR district ILIKE $${params.length}
-      )`);
-    }
-
-    where.push(`geom IS NOT NULL`);
-
-    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-
-    const safeLimit = Math.min(Number(limit) || 10000, 10000);
-    params.push(safeLimit);
-
-    const sql = `
-      SELECT
+    let sql = `
+      SELECT 
         id,
         name,
         address,
@@ -212,92 +225,111 @@ export const getPharmaciesList = async (req, res) => {
         phone,
         status,
         rating,
-        image,
+        image_url,
         product_groups,
-        ST_X(geom) AS lon,
-        ST_Y(geom) AS lat
-      FROM pharmacy_stores_cleaned
-      ${whereSql}
-      ORDER BY rating DESC NULLS LAST, id ASC
-      LIMIT $${params.length};
+        is_surveyed,
+        surveyed_at,
+        lat,
+        lng
+      FROM ${TABLE_NAME}
+      WHERE lat IS NOT NULL
+        AND lng IS NOT NULL
+        AND lat != 0
+        AND lng != 0
     `;
 
-    const { rows } = await pool.query(sql, params);
+    if (search) {
+      sql += `
+        AND (
+          LOWER(name) LIKE LOWER($${index})
+          OR LOWER(address) LIKE LOWER($${index})
+          OR LOWER(province) LIKE LOWER($${index})
+          OR LOWER(district) LIKE LOWER($${index})
+        )
+      `;
+      values.push(`%${search}%`);
+      index++;
+    }
+
+    if (province) {
+      sql += ` AND province = $${index++}`;
+      values.push(province);
+    }
+
+    if (district) {
+      sql += ` AND district = $${index++}`;
+      values.push(district);
+    }
+
+    if (rating_min) {
+      sql += ` AND rating >= $${index++}`;
+      values.push(Number(rating_min));
+    }
+
+    sql += ` ORDER BY id ASC`;
+
+    if (limit) {
+      sql += ` LIMIT $${index++}`;
+      values.push(limit);
+    }
+
+    const { rows } = await pool.query(sql, values);
+
     res.json(rows);
   } catch (err) {
-    console.error("❌ Lỗi /pharmacies:", err);
+    console.error("❌ Lỗi getPharmaciesList:", err);
     res.status(500).json({
-      error: "server_error",
-      message: err.message,
+      message: "Lỗi server khi lấy danh sách nhà thuốc",
+      error: err.message,
     });
   }
 };
 
 export const getHeatmap = async (req, res) => {
   try {
-    const { province, district, status, rating_min, bbox } = req.query;
+    const { bbox } = req.query;
+    const parsedBBox = parseBBox(bbox);
 
-    const where = [];
-    const params = [];
+    const values = [];
+    let index = 1;
 
-    if (province) {
-      const normalized = province.replace(/^Tỉnh |^Thành phố /i, "").trim();
-      params.push(`%${normalized}%`);
-      where.push(`province ILIKE $${params.length}`);
-    }
-
-    if (district) {
-      params.push(`%${district}%`);
-      where.push(`district ILIKE $${params.length}`);
-    }
-
-    if (status) {
-      params.push(status);
-      where.push(`status = $${params.length}`);
-    }
-
-    if (rating_min) {
-      params.push(Number(rating_min));
-      where.push(`rating >= $${params.length}`);
-    }
-
-    where.push(`geom IS NOT NULL`);
-
-    if (bbox) {
-      const [minx, miny, maxx, maxy] = bbox.split(",").map(Number);
-
-      const isValidBbox =
-        [minx, miny, maxx, maxy].every((n) => Number.isFinite(n)) &&
-        minx < maxx &&
-        miny < maxy;
-
-      if (isValidBbox) {
-        params.push(minx, miny, maxx, maxy);
-        where.push(
-          `geom && ST_MakeEnvelope($${params.length - 3}, $${params.length - 2}, $${params.length - 1}, $${params.length}, 4326)`
-        );
-      }
-    }
-
-    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-
-    const sql = `
-      SELECT
-        ST_Y(geom) AS lat,
-        ST_X(geom) AS lon,
-        COALESCE(NULLIF(rating, 0), 1) AS w
-      FROM pharmacy_stores_cleaned
-      ${whereSql}
-      LIMIT 20000;
+    let sql = `
+      SELECT lat, lng
+      FROM ${TABLE_NAME}
+      WHERE lat IS NOT NULL
+        AND lng IS NOT NULL
+        AND lat != 0
+        AND lng != 0
     `;
 
-    const { rows } = await pool.query(sql, params);
-    res.json(rows);
+    if (parsedBBox) {
+      sql += `
+        AND lng BETWEEN $${index++} AND $${index++}
+        AND lat BETWEEN $${index++} AND $${index++}
+      `;
+
+      values.push(
+        parsedBBox.minLng,
+        parsedBBox.maxLng,
+        parsedBBox.minLat,
+        parsedBBox.maxLat
+      );
+    }
+
+    const { rows } = await pool.query(sql, values);
+
+    res.json(
+      rows.map((row) => ({
+        lat: Number(row.lat),
+        lng: Number(row.lng),
+        intensity: 1,
+      }))
+    );
   } catch (err) {
-    console.error("❌ Lỗi /heat:", err);
+    console.error("❌ Lỗi getHeatmap:", err);
     res.status(500).json({
-      error: "server_error",
-      message: err.message,
+      message: "Lỗi server khi lấy heatmap",
+      error: err.message,
     });
   }
 };
@@ -309,53 +341,33 @@ export const updatePharmacy = async (req, res) => {
     const {
       name,
       address,
-      province,
-      district,
       phone,
       status,
       rating,
-      image,
+      image_url,
       product_groups,
     } = req.body;
 
-    if (!id || Number.isNaN(Number(id))) {
+    if (!id) {
       return res.status(400).json({
-        message: "ID nhà thuốc không hợp lệ",
+        message: "Thiếu id nhà thuốc",
       });
     }
 
-    const ratingValue =
-      rating === undefined || rating === null || rating === ""
-        ? null
-        : Number(rating);
-
-    const productGroupsJson =
-      product_groups === undefined || product_groups === null
-        ? null
-        : JSON.stringify(Array.isArray(product_groups) ? product_groups : []);
-
-    const imageValue =
-      image === undefined || image === null || image === "" || image === "N/A"
-        ? null
-        : image;
-
     const sql = `
-      UPDATE pharmacy_stores_cleaned
+      UPDATE ${TABLE_NAME}
       SET
-        name = COALESCE(NULLIF($1, ''), name),
-        address = COALESCE(NULLIF($2, ''), address),
-        province = COALESCE(NULLIF($3, ''), province),
-        district = COALESCE(NULLIF($4, ''), district),
-        phone = COALESCE(NULLIF($5, ''), phone),
-        status = COALESCE(NULLIF($6, ''), status),
-        rating = COALESCE($7, rating),
-        image = COALESCE($8, image),
-        product_groups = COALESCE($9::jsonb, product_groups),
+        name = COALESCE($1, name),
+        address = COALESCE($2, address),
+        phone = COALESCE($3, phone),
+        status = COALESCE($4, status),
+        rating = COALESCE($5, rating),
+        image_url = COALESCE($6, image_url),
+        product_groups = COALESCE($7::jsonb, product_groups),
         is_surveyed = TRUE,
-        surveyed_at = COALESCE(surveyed_at, NOW()),
-        updated_at = NOW()
-      WHERE id = $10
-      RETURNING
+        surveyed_at = NOW()
+      WHERE id = $8
+      RETURNING 
         id,
         name,
         address,
@@ -364,27 +376,30 @@ export const updatePharmacy = async (req, res) => {
         phone,
         status,
         rating,
-        image,
+        image_url,
         product_groups,
         is_surveyed,
         surveyed_at,
-        updated_at,
-        ST_X(geom) AS lon,
-        ST_Y(geom) AS lat;
+        lat,
+        lng;
     `;
 
-    const { rows } = await pool.query(sql, [
-      name ?? null,
-      address ?? null,
-      province ?? null,
-      district ?? null,
-      phone ?? null,
-      status ?? null,
-      Number.isFinite(ratingValue) ? ratingValue : null,
-      imageValue,
-      productGroupsJson,
-      Number(id),
-    ]);
+    const values = [
+      name === undefined || name === "" ? null : name,
+      address === undefined || address === "" ? null : address,
+      phone === undefined || phone === "" ? null : phone,
+      status === undefined || status === "" ? null : status,
+      rating === undefined || rating === null || rating === ""
+        ? null
+        : Number(rating),
+      image_url === undefined || image_url === "" ? null : image_url,
+      Array.isArray(product_groups)
+        ? JSON.stringify(product_groups)
+        : null,
+      id,
+    ];
+
+    const { rows } = await pool.query(sql, values);
 
     if (rows.length === 0) {
       return res.status(404).json({
@@ -393,11 +408,11 @@ export const updatePharmacy = async (req, res) => {
     }
 
     res.json({
-      message: "Cập nhật thành công",
+      message: "Cập nhật nhà thuốc thành công",
       pharmacy: rows[0],
     });
   } catch (err) {
-    console.error("❌ Lỗi update pharmacy:", err);
+    console.error("❌ Lỗi updatePharmacy:", err);
     res.status(500).json({
       message: "Lỗi server khi cập nhật nhà thuốc",
       error: err.message,
