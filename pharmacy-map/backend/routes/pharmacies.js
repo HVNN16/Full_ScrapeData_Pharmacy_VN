@@ -26,14 +26,19 @@ const router = express.Router();
 
 router.get("/pharmacies", getPharmaciesList);
 router.get("/pharmacies.geojson", getPharmaciesGeoJSON);
+
 router.get("/provinces", getProvinces);
+
 router.get("/heat", getHeatmap);
+router.get("/heatmap", getHeatmap);
+
 router.get("/stats/province", getProvinceStats);
 router.get("/stats/district", getDistrictStats);
+
 router.get("/route", getRoute);
 
 // Tạm thời mở để Flutter test cập nhật.
-// Sau khi chạy ổn, nên đổi thành:
+// Sau khi ổn và Flutter đã gửi token thì đổi thành:
 // router.put("/pharmacies/:id", verifyToken, updatePharmacy);
 router.put("/pharmacies/:id", updatePharmacy);
 
