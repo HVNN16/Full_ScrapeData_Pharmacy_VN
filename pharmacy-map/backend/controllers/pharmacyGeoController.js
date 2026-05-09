@@ -55,6 +55,13 @@ export const getPharmaciesGeoJSON = async (req, res) => {
     const limit = parseLimit(req.query.limit);
     const parsedBBox = parseBBox(bbox);
 
+    const isOverviewMode =
+      mode === "overview" && !search && !province && !district;
+
+    const tableSource = isOverviewMode
+      ? `${TABLE_NAME} TABLESAMPLE BERNOULLI (35) REPEATABLE (10)`
+      : TABLE_NAME;
+
     const values = [];
     let index = 1;
 
@@ -123,13 +130,11 @@ export const getPharmaciesGeoJSON = async (req, res) => {
         surveyed_at,
         ${LAT_COL} AS lat,
         ${LNG_COL} AS lng
-      FROM ${TABLE_NAME}
+      FROM ${tableSource}
       ${whereSql}
     `;
 
-    if (mode === "overview") {
-      sql += ` ORDER BY province ASC, district ASC, id ASC`;
-    } else {
+    if (!isOverviewMode) {
       sql += ` ORDER BY id ASC`;
     }
 
