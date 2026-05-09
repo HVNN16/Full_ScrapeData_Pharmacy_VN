@@ -410,7 +410,7 @@ export const updatePharmacy = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Lỗi updatePharmacy:", err);
-
+//test
     res.status(500).json({
       message: "Lỗi server khi cập nhật nhà thuốc",
       error: err.message,
