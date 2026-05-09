@@ -24,6 +24,30 @@ const parseBBox = (bbox) => {
   return { minLng, minLat, maxLng, maxLat };
 };
 
+export const getPharmacyCount = async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT COUNT(*)::int AS total
+      FROM ${TABLE_NAME}
+      WHERE ${LAT_COL} IS NOT NULL
+        AND ${LNG_COL} IS NOT NULL
+        AND ${LAT_COL} != 0
+        AND ${LNG_COL} != 0
+    `);
+
+    res.json({
+      total: rows[0].total,
+    });
+  } catch (err) {
+    console.error("❌ Lỗi getPharmacyCount:", err);
+
+    res.status(500).json({
+      message: "Lỗi lấy tổng số nhà thuốc",
+      error: err.message,
+    });
+  }
+};
+
 export const getPharmaciesGeoJSON = async (req, res) => {
   try {
     const { bbox, mode, search, province, district, rating_min } = req.query;
@@ -83,80 +107,35 @@ export const getPharmaciesGeoJSON = async (req, res) => {
       values.push(Number(rating_min));
     }
 
-    let sql;
+    let sql = `
+      SELECT 
+        id,
+        name,
+        address,
+        province,
+        district,
+        phone,
+        status,
+        rating,
+        COALESCE(image_url, image) AS image_url,
+        product_groups,
+        is_surveyed,
+        surveyed_at,
+        ${LAT_COL} AS lat,
+        ${LNG_COL} AS lng
+      FROM ${TABLE_NAME}
+      ${whereSql}
+    `;
 
-    if (mode === "overview" && limit) {
-      sql = `
-        SELECT 
-          id,
-          name,
-          address,
-          province,
-          district,
-          phone,
-          status,
-          rating,
-          COALESCE(image_url, image) AS image_url,
-          product_groups,
-          is_surveyed,
-          surveyed_at,
-          ${LAT_COL} AS lat,
-          ${LNG_COL} AS lng
-        FROM (
-          SELECT
-            id,
-            name,
-            address,
-            province,
-            district,
-            phone,
-            status,
-            rating,
-            image,
-            image_url,
-            product_groups,
-            is_surveyed,
-            surveyed_at,
-            ${LAT_COL},
-            ${LNG_COL},
-            ROW_NUMBER() OVER (
-              PARTITION BY FLOOR(${LAT_COL} * 5), FLOOR(${LNG_COL} * 5)
-              ORDER BY id ASC
-            ) AS rn
-          FROM ${TABLE_NAME}
-          ${whereSql}
-        ) AS spread_data
-        ORDER BY rn ASC, lat ASC, lng ASC
-        LIMIT $${index++}
-      `;
-
-      values.push(limit);
+    if (mode === "overview") {
+      sql += ` ORDER BY province ASC, district ASC, id ASC`;
     } else {
-      sql = `
-        SELECT 
-          id,
-          name,
-          address,
-          province,
-          district,
-          phone,
-          status,
-          rating,
-          COALESCE(image_url, image) AS image_url,
-          product_groups,
-          is_surveyed,
-          surveyed_at,
-          ${LAT_COL} AS lat,
-          ${LNG_COL} AS lng
-        FROM ${TABLE_NAME}
-        ${whereSql}
-        ORDER BY id ASC
-      `;
+      sql += ` ORDER BY id ASC`;
+    }
 
-      if (limit) {
-        sql += ` LIMIT $${index++}`;
-        values.push(limit);
-      }
+    if (limit) {
+      sql += ` LIMIT $${index++}`;
+      values.push(limit);
     }
 
     const { rows } = await pool.query(sql, values);
@@ -191,6 +170,7 @@ export const getPharmaciesGeoJSON = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Lỗi getPharmaciesGeoJSON:", err);
+
     res.status(500).json({
       message: "Lỗi server khi lấy GeoJSON nhà thuốc",
       error: err.message,
@@ -270,6 +250,7 @@ export const getPharmaciesList = async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error("❌ Lỗi getPharmaciesList:", err);
+
     res.status(500).json({
       message: "Lỗi server khi lấy danh sách nhà thuốc",
       error: err.message,
@@ -331,6 +312,7 @@ export const getHeatmap = async (req, res) => {
     );
   } catch (err) {
     console.error("❌ Lỗi getHeatmap:", err);
+
     res.status(500).json({
       message: "Lỗi server khi lấy heatmap",
       error: err.message,
@@ -423,6 +405,7 @@ export const updatePharmacy = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Lỗi updatePharmacy:", err);
+
     res.status(500).json({
       message: "Lỗi server khi cập nhật nhà thuốc",
       error: err.message,
