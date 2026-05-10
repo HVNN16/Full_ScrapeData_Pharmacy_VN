@@ -9,6 +9,7 @@ import adminPharmacies from "./routes/adminPharmacies.js";
 import pharmaciesRoute from "./routes/pharmacies.js";
 import authRoutes from "./routes/auth.js";
 import adminUsersRoutes from "./routes/adminUsers.js";
+import adminStatsRoutes from "./routes/adminStats.js";
 import surveyAreasRoutes from "./routes/surveyAreas.js";
 import uploadRoutes from "./routes/upload.js";
 
@@ -52,6 +53,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin/pharmacies", adminPharmacies);
 
 app.use("/api/admin/users", adminUsersRoutes);
+
+app.use("/api/admin/stats", adminStatsRoutes);
 
 app.use("/api/survey-areas", surveyAreasRoutes);
 
