@@ -248,6 +248,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+// ==========================
+// GET LIST + FILTER + SEARCH
+// ==========================
+
 router.get("/", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -259,13 +263,19 @@ router.get("/", verifyToken, verifyAdmin, async (req, res) => {
     const province = req.query.province || "";
     const district = req.query.district || "";
     const hasImage = String(req.query.hasImage || "false") === "true";
+    const isSurveyed = req.query.isSurveyed;
 
     let where = "WHERE 1=1";
     const params = [];
 
     if (search) {
       params.push(`%${search}%`);
-      where += ` AND name ILIKE $${params.length}`;
+      where += ` AND (
+        name ILIKE $${params.length}
+        OR address ILIKE $${params.length}
+        OR province ILIKE $${params.length}
+        OR district ILIKE $${params.length}
+      )`;
     }
 
     if (province) {
@@ -274,8 +284,8 @@ router.get("/", verifyToken, verifyAdmin, async (req, res) => {
     }
 
     if (district) {
-      params.push(district);
-      where += ` AND district = $${params.length}`;
+      params.push(`%${district}%`);
+      where += ` AND district ILIKE $${params.length}`;
     }
 
     if (hasImage) {
@@ -289,6 +299,14 @@ router.get("/", verifyToken, verifyAdmin, async (req, res) => {
       `;
     }
 
+    if (isSurveyed === "true") {
+      where += ` AND COALESCE(is_surveyed, false) = true`;
+    }
+
+    if (isSurveyed === "false") {
+      where += ` AND COALESCE(is_surveyed, false) = false`;
+    }
+
     const countSql = `
       SELECT COUNT(*)
       FROM pharmacy_stores_cleaned
@@ -299,11 +317,29 @@ router.get("/", verifyToken, verifyAdmin, async (req, res) => {
     const total = Number(totalRes.rows?.[0]?.count || 0);
 
     const dataSql = `
-      SELECT id, name, address, province, district, phone, status, rating, image, latitude, longitude
+      SELECT
+        id,
+        name,
+        address,
+        province,
+        district,
+        phone,
+        status,
+        rating,
+        image,
+        latitude,
+        longitude,
+        COALESCE(is_surveyed, false) AS is_surveyed,
+        surveyed_at,
+        NULL::text AS surveyed_by
       FROM pharmacy_stores_cleaned
       ${where}
-      ORDER BY id
-      LIMIT $${params.length + 1} OFFSET $${params.length + 2};
+      ORDER BY
+        COALESCE(is_surveyed, false) DESC,
+        surveyed_at DESC NULLS LAST,
+        id DESC
+      LIMIT $${params.length + 1}
+      OFFSET $${params.length + 2};
     `;
 
     const dataRes = await pool.query(dataSql, [...params, limit, offset]);
@@ -316,152 +352,243 @@ router.get("/", verifyToken, verifyAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error("GET /admin/pharmacies error:", err);
-    res.status(500).json({ error: "GET error" });
+    res.status(500).json({
+      error: "GET error",
+      message: err.message,
+    });
   }
 });
 
-router.post("/", verifyToken, verifyAdmin, upload.single("imageFile"), async (req, res) => {
-  try {
-    let {
-      name,
-      address,
-      province,
-      district,
-      phone,
-      status,
-      rating,
-      latitude,
-      longitude,
-      image,
-    } = req.body;
+// ==========================
+// ADD PHARMACY
+// ==========================
 
-    if (req.file) {
-      image = `/uploads/pharmacies/${req.file.filename}`;
+router.post(
+  "/",
+  verifyToken,
+  verifyAdmin,
+  upload.single("imageFile"),
+  async (req, res) => {
+    try {
+      let {
+        name,
+        address,
+        province,
+        district,
+        phone,
+        status,
+        rating,
+        latitude,
+        longitude,
+        image,
+      } = req.body;
+
+      if (req.file) {
+        image = `/uploads/pharmacies/${req.file.filename}`;
+      }
+
+      latitude = parseFloat(latitude);
+      longitude = parseFloat(longitude);
+
+      if (isNaN(latitude) || isNaN(longitude)) {
+        return res.status(400).json({
+          error: "Latitude/Longitude không hợp lệ",
+        });
+      }
+
+      const sql = `
+        INSERT INTO pharmacy_stores_cleaned 
+          (
+            name,
+            address,
+            province,
+            district,
+            phone,
+            status,
+            rating,
+            image,
+            geom,
+            longitude,
+            latitude,
+            is_surveyed,
+            surveyed_at
+          )
+        VALUES
+          (
+            $1,$2,$3,$4,$5,$6,$7,$8,
+            ST_SetSRID(ST_Point($9,$10),4326),
+            $9,$10,
+            false,
+            NULL
+          )
+        RETURNING *;
+      `;
+
+      const result = await pool.query(sql, [
+        name,
+        address,
+        province,
+        district,
+        phone,
+        status,
+        rating,
+        image || null,
+        longitude,
+        latitude,
+      ]);
+
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error("POST /admin/pharmacies error:", err);
+      res.status(500).json({
+        error: "POST error",
+        message: err.message,
+      });
     }
-
-    latitude = parseFloat(latitude);
-    longitude = parseFloat(longitude);
-
-    if (isNaN(latitude) || isNaN(longitude)) {
-      return res.status(400).json({ error: "Latitude/Longitude không hợp lệ" });
-    }
-
-    const sql = `
-      INSERT INTO pharmacy_stores_cleaned 
-        (name, address, province, district, phone, status, rating, image, geom, longitude, latitude)
-      VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8, ST_SetSRID(ST_Point($9,$10),4326), $9, $10)
-      RETURNING *;
-    `;
-
-    const result = await pool.query(sql, [
-      name,
-      address,
-      province,
-      district,
-      phone,
-      status,
-      rating,
-      image || null,
-      longitude,
-      latitude,
-    ]);
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error("POST /admin/pharmacies error:", err);
-    res.status(500).json({ error: "POST error" });
   }
-});
+);
 
-router.put("/:id", verifyToken, verifyAdmin, upload.single("imageFile"), async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
+// ==========================
+// UPDATE PHARMACY
+// ==========================
 
-    if (!id) {
-      return res.status(400).json({ error: "ID không hợp lệ" });
+router.put(
+  "/:id",
+  verifyToken,
+  verifyAdmin,
+  upload.single("imageFile"),
+  async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+
+      if (!id) {
+        return res.status(400).json({
+          error: "ID không hợp lệ",
+        });
+      }
+
+      let {
+        name,
+        address,
+        province,
+        district,
+        phone,
+        status,
+        rating,
+        latitude,
+        longitude,
+        image,
+      } = req.body;
+
+      if (req.file) {
+        image = `/uploads/pharmacies/${req.file.filename}`;
+      }
+
+      latitude = parseFloat(latitude);
+      longitude = parseFloat(longitude);
+
+      if (isNaN(latitude) || isNaN(longitude)) {
+        return res.status(400).json({
+          error: "Latitude/Longitude không hợp lệ",
+        });
+      }
+
+      const sql = `
+        UPDATE pharmacy_stores_cleaned SET
+          name=$1,
+          address=$2,
+          province=$3,
+          district=$4,
+          phone=$5,
+          status=$6,
+          rating=$7,
+          image=$8,
+          geom=ST_SetSRID(ST_Point($9, $10), 4326),
+          longitude=$9,
+          latitude=$10
+        WHERE id=$11
+        RETURNING
+          id,
+          name,
+          address,
+          province,
+          district,
+          phone,
+          status,
+          rating,
+          image,
+          latitude,
+          longitude,
+          COALESCE(is_surveyed, false) AS is_surveyed,
+          surveyed_at;
+      `;
+
+      const result = await pool.query(sql, [
+        name,
+        address,
+        province,
+        district,
+        phone,
+        status,
+        rating,
+        image || null,
+        longitude,
+        latitude,
+        id,
+      ]);
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({
+          error: "Không tìm thấy nhà thuốc",
+        });
+      }
+
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error("PUT /admin/pharmacies error:", err);
+      res.status(500).json({
+        error: "PUT error",
+        message: err.message,
+      });
     }
-
-    let {
-      name,
-      address,
-      province,
-      district,
-      phone,
-      status,
-      rating,
-      latitude,
-      longitude,
-      image,
-    } = req.body;
-
-    if (req.file) {
-      image = `/uploads/pharmacies/${req.file.filename}`;
-    }
-
-    latitude = parseFloat(latitude);
-    longitude = parseFloat(longitude);
-
-    if (isNaN(latitude) || isNaN(longitude)) {
-      return res.status(400).json({ error: "Latitude/Longitude không hợp lệ" });
-    }
-
-    const sql = `
-      UPDATE pharmacy_stores_cleaned SET
-        name=$1,
-        address=$2,
-        province=$3,
-        district=$4,
-        phone=$5,
-        status=$6,
-        rating=$7,
-        image=$8,
-        geom = ST_SetSRID(ST_Point($9, $10), 4326),
-        longitude=$9,
-        latitude=$10
-      WHERE id=$11
-      RETURNING *;
-    `;
-
-    const result = await pool.query(sql, [
-      name,
-      address,
-      province,
-      district,
-      phone,
-      status,
-      rating,
-      image || null,
-      longitude,
-      latitude,
-      id,
-    ]);
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Không tìm thấy nhà thuốc" });
-    }
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error("PUT /admin/pharmacies error:", err);
-    res.status(500).json({ error: "PUT error" });
   }
-});
+);
+
+// ==========================
+// DELETE PHARMACY
+// ==========================
 
 router.delete("/:id", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
 
     if (!id) {
-      return res.status(400).json({ error: "ID không hợp lệ" });
+      return res.status(400).json({
+        error: "ID không hợp lệ",
+      });
     }
 
-    await pool.query("DELETE FROM pharmacy_stores_cleaned WHERE id=$1", [id]);
+    const result = await pool.query(
+      "DELETE FROM pharmacy_stores_cleaned WHERE id=$1 RETURNING id",
+      [id]
+    );
 
-    res.json({ success: true });
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        error: "Không tìm thấy nhà thuốc",
+      });
+    }
+
+    res.json({
+      success: true,
+      deletedId: id,
+    });
   } catch (err) {
     console.error("DELETE /admin/pharmacies error:", err);
-    res.status(500).json({ error: "DELETE error" });
+    res.status(500).json({
+      error: "DELETE error",
+      message: err.message,
+    });
   }
 });
 
