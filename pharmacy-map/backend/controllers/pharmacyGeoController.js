@@ -59,7 +59,7 @@ export const getPharmaciesGeoJSON = async (req, res) => {
       mode === "overview" && !search && !province && !district;
 
     const tableSource = isOverviewMode
-      ? `${TABLE_NAME} TABLESAMPLE BERNOULLI (35) REPEATABLE (10)`
+      ? `${TABLE_NAME} TABLESAMPLE BERNOULLI (60) REPEATABLE (10)`
       : TABLE_NAME;
 
     const values = [];
