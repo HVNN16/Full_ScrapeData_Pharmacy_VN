@@ -39,7 +39,8 @@ router.get("/stats/district", getDistrictStats);
 
 router.get("/route", getRoute);
 
-router.put("/pharmacies/:id", updatePharmacy);
+// Quan trọng: cần verifyToken để lấy req.user.id lưu người khảo sát
+router.put("/pharmacies/:id", verifyToken, updatePharmacy);
 
 router.get("/export-csv", verifyToken, verifyExportRole, exportPharmaciesCSV);
 

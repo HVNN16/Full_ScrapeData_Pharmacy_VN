@@ -128,6 +128,7 @@ export const getPharmaciesGeoJSON = async (req, res) => {
         product_groups,
         is_surveyed,
         surveyed_at,
+        surveyed_by,
         ${LAT_COL} AS lat,
         ${LNG_COL} AS lng
       FROM ${tableSource}
@@ -166,6 +167,7 @@ export const getPharmaciesGeoJSON = async (req, res) => {
           product_groups: row.product_groups || [],
           is_surveyed: row.is_surveyed || false,
           surveyed_at: row.surveyed_at || null,
+          surveyed_by: row.surveyed_by || null,
         },
       }));
 
@@ -206,6 +208,7 @@ export const getPharmaciesList = async (req, res) => {
         product_groups,
         is_surveyed,
         surveyed_at,
+        surveyed_by,
         ${LAT_COL} AS lat,
         ${LNG_COL} AS lng
       FROM ${TABLE_NAME}
@@ -341,6 +344,8 @@ export const updatePharmacy = async (req, res) => {
       product_groups,
     } = req.body;
 
+    const surveyedBy = req.user?.id || null;
+
     if (!id) {
       return res.status(400).json({
         message: "Thiếu id nhà thuốc",
@@ -358,11 +363,13 @@ export const updatePharmacy = async (req, res) => {
         status = COALESCE($6, status),
         rating = COALESCE($7, rating),
         image_url = COALESCE($8, image_url),
+        image = COALESCE($8, image),
         product_groups = COALESCE($9::jsonb, product_groups),
         is_surveyed = TRUE,
         surveyed_at = NOW(),
+        surveyed_by = COALESCE($10, surveyed_by),
         updated_at = NOW()
-      WHERE id = $10
+      WHERE id = $11
       RETURNING 
         id,
         name,
@@ -376,6 +383,7 @@ export const updatePharmacy = async (req, res) => {
         product_groups,
         is_surveyed,
         surveyed_at,
+        surveyed_by,
         updated_at,
         ${LAT_COL} AS lat,
         ${LNG_COL} AS lng;
@@ -393,6 +401,7 @@ export const updatePharmacy = async (req, res) => {
         : Number(rating),
       image_url === undefined || image_url === "" ? null : image_url,
       Array.isArray(product_groups) ? JSON.stringify(product_groups) : null,
+      surveyedBy,
       id,
     ];
 
@@ -410,7 +419,7 @@ export const updatePharmacy = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Lỗi updatePharmacy:", err);
-//test
+
     res.status(500).json({
       message: "Lỗi server khi cập nhật nhà thuốc",
       error: err.message,
