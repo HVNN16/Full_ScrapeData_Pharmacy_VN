@@ -300,4 +300,5 @@ export const deleteUser = async (req, res) => {
       error: err.message,
     });
   }
+  //
 };
