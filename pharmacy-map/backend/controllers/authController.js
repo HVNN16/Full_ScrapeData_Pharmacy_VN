@@ -32,11 +32,11 @@ export const register = async (req, res) => {
 
     const result = await pool.query(
       `
-      INSERT INTO users(fullname, email, password, role, is_active)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, fullname, email, role, is_active
+      INSERT INTO users(fullname, email, password, role)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, fullname, email, role
       `,
-      [fullname, email, hashed, "user", true]
+      [fullname, email, hashed, "user"]
     );
 
     return res.status(201).json({
@@ -46,6 +46,7 @@ export const register = async (req, res) => {
     });
   } catch (err) {
     console.error("REGISTER ERROR:", err);
+
     return res.status(500).json({
       success: false,
       message: "Lỗi server khi đăng ký",
@@ -80,13 +81,6 @@ export const login = async (req, res) => {
     }
 
     const user = result.rows[0];
-
-    if (user.is_active === false) {
-      return res.status(403).json({
-        success: false,
-        message: "Tài khoản của bạn đã bị khóa!",
-      });
-    }
 
     const valid = await bcrypt.compare(password, user.password);
 
@@ -124,11 +118,11 @@ export const login = async (req, res) => {
         fullname: user.fullname,
         email: user.email,
         role: user.role,
-        isActive: user.is_active,
       },
     });
   } catch (err) {
     console.error("LOGIN ERROR:", err);
+
     return res.status(500).json({
       success: false,
       message: "Lỗi server khi đăng nhập",
