@@ -12,6 +12,7 @@ import adminUsersRoutes from "./routes/adminUsers.js";
 import adminStatsRoutes from "./routes/adminStats.js";
 import surveyAreasRoutes from "./routes/surveyAreas.js";
 import uploadRoutes from "./routes/upload.js";
+import exportRoutes from "./routes/export.js";
 
 const app = express();
 
@@ -30,10 +31,7 @@ app.use(
   })
 );
 
-// ==========================
 // STATIC UPLOADS
-// ==========================
-
 app.use(
   "/uploads",
   express.static(path.join(process.cwd(), "uploads"), {
@@ -42,46 +40,29 @@ app.use(
   })
 );
 
-// ==========================
 // API ROUTES
-// ==========================
-
 app.use("/api", pharmaciesRoute);
-
 app.use("/api/auth", authRoutes);
-
 app.use("/api/admin/pharmacies", adminPharmacies);
-
 app.use("/api/admin/users", adminUsersRoutes);
-
 app.use("/api/admin/stats", adminStatsRoutes);
-
 app.use("/api/survey-areas", surveyAreasRoutes);
-
 app.use("/api", uploadRoutes);
+app.use("/api", exportRoutes);
 
-// ==========================
 // ROOT
-// ==========================
-
 app.get("/", (req, res) => {
   res.send("🚀 Pharmacy Backend Running...");
 });
 
-// ==========================
 // 404
-// ==========================
-
 app.use((req, res) => {
   res.status(404).json({
     message: "API route not found",
   });
 });
 
-// ==========================
 // ERROR HANDLER
-// ==========================
-
 app.use((err, req, res, next) => {
   console.error("❌ SERVER ERROR:", err);
 
@@ -91,10 +72,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ==========================
 // START SERVER
-// ==========================
-
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {

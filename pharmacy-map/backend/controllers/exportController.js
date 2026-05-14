@@ -4,44 +4,61 @@ import { Parser } from "json2csv";
 
 export async function exportPharmaciesCSV(req, res) {
   try {
-    const { province, district, rating_min } = req.query;
+    const { province, district, rating_min, surveyed } = req.query;
+
     const where = [];
     const params = [];
 
-    // Lọc theo tỉnh
     if (province) {
       params.push(`%${province}%`);
       where.push(`province ILIKE $${params.length}`);
     }
 
-    // Lọc theo huyện
     if (district) {
       params.push(`%${district}%`);
       where.push(`district ILIKE $${params.length}`);
     }
 
-    // Lọc rating tối thiểu
     if (rating_min) {
-      params.push(+rating_min);
+      params.push(Number(rating_min));
       where.push(`rating >= $${params.length}`);
+    }
+
+    if (surveyed === "true") {
+      where.push(`is_surveyed = true`);
+    }
+
+    if (surveyed === "false") {
+      where.push(`is_surveyed = false`);
     }
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
     const sql = `
       SELECT 
-        name, address, province, district, phone, status, rating,
-        ST_X(geom) AS lon, ST_Y(geom) AS lat
+        id,
+        name,
+        address,
+        province,
+        district,
+        phone,
+        status,
+        rating,
+        longitude AS lon,
+        latitude AS lat,
+        image_url,
+        is_surveyed,
+        surveyed_at
       FROM public.pharmacy_stores_cleaned
       ${whereSql}
-      ORDER BY province, district, name;
+      ORDER BY province, district, name
     `;
 
     const { rows } = await pool.query(sql, params);
 
-    // Tạo CSV
     const json2csv = new Parser({
       fields: [
+        "id",
         "name",
         "address",
         "province",
@@ -51,26 +68,45 @@ export async function exportPharmaciesCSV(req, res) {
         "rating",
         "lon",
         "lat",
+        "image_url",
+        "is_surveyed",
+        "surveyed_at",
       ],
     });
 
     const csv = json2csv.parse(rows);
-
-    // 👉 THÊM BOM UTF-8 THỦ CÔNG (Excel mới đọc đúng)
     const BOM = "\ufeff";
 
     let filename = "pharmacy_export.csv";
-    if (province) filename = `pharmacy_${province}.csv`;
-    if (district) filename = `pharmacy_${province}_${district}.csv`;
 
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    if (province) {
+      filename = `pharmacy_${province}.csv`;
+    }
 
-    // 👍 Gửi file với BOM
-    return res.send(BOM + csv);
+    if (province && district) {
+      filename = `pharmacy_${province}_${district}.csv`;
+    }
 
+    filename = encodeURIComponent(filename);
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${filename}"`
+    );
+
+    res.setHeader(
+      "Content-Type",
+      "text/csv; charset=utf-8"
+    );
+
+    return res.status(200).send(BOM + csv);
   } catch (err) {
     console.error("❌ Lỗi xuất CSV:", err);
-    res.status(500).json({ error: "server_error" });
+
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi xuất CSV",
+      error: err.message,
+    });
   }
 }
