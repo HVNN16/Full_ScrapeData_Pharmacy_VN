@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { fetchPharmaciesList } from "../api";
 
 function PharmacyList({
   province,
@@ -10,32 +9,12 @@ function PharmacyList({
   setUserLocation,
   setRadiusKm,
   visibleMapCount = 0,
+  features = [],
 }) {
-  const [items, setItems] = useState([]);
-  const [filtered, setFiltered] = useState([]);
   const [search, setSearch] = useState("");
   const [radius, setRadius] = useState(3);
   const [sortByDistance, setSortByDistance] = useState(true);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const data = await fetchPharmaciesList({
-          province: province || "",
-          district: district || "",
-          rating_min: ratingMin || 0,
-          limit: 10000,
-        });
-
-        setItems(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error("❌ Lỗi tải danh sách nhà thuốc:", err);
-        setItems([]);
-      }
-    };
-
-    fetchData();
-  }, [province, district, ratingMin]);
+  const [nearbyMode, setNearbyMode] = useState(false);
 
   const distanceKm = (lat1, lon1, lat2, lon2) => {
     const R = 6371;
@@ -50,6 +29,87 @@ function PharmacyList({
 
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
+
+  const items = useMemo(() => {
+    if (!Array.isArray(features)) return [];
+
+    return features
+      .map((feature) => {
+        const props = feature?.properties || {};
+        const coords = feature?.geometry?.coordinates || [];
+
+        const lon = Number(coords[0]);
+        const lat = Number(coords[1]);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+        return {
+          ...props,
+          lat,
+          lon,
+        };
+      })
+      .filter(Boolean);
+  }, [features]);
+
+  const searchedItems = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+
+    if (!keyword) return items;
+
+    return items.filter((item) => {
+      const name = item.name?.toLowerCase() || "";
+      const address = item.address?.toLowerCase() || "";
+      const provinceName = item.province?.toLowerCase() || "";
+      const districtName = item.district?.toLowerCase() || "";
+
+      return (
+        name.includes(keyword) ||
+        address.includes(keyword) ||
+        provinceName.includes(keyword) ||
+        districtName.includes(keyword)
+      );
+    });
+  }, [items, search]);
+
+  const filtered = useMemo(() => {
+    if (!nearbyMode || !userLocation) return searchedItems;
+
+    const withDistance = searchedItems.map((item) => {
+      const d = distanceKm(
+        userLocation.lat,
+        userLocation.lon,
+        Number(item.lat),
+        Number(item.lon)
+      );
+
+      return {
+        ...item,
+        distance: d,
+      };
+    });
+
+    const nearby = withDistance.filter((item) => item.distance <= radius);
+
+    if (!sortByDistance) return nearby;
+
+    return [...nearby].sort((a, b) => a.distance - b.distance);
+  }, [searchedItems, nearbyMode, userLocation, radius, sortByDistance]);
+
+  useEffect(() => {
+    setNearbyMode(false);
+  }, [province, district, ratingMin, features]);
+
+  useEffect(() => {
+    if (filtered.length === 1) {
+      const only = filtered[0];
+      setSelectedPharmacy({
+        lat: Number(only.lat),
+        lon: Number(only.lon),
+        ...only,
+      });
+    }
+  }, [filtered, setSelectedPharmacy]);
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
@@ -71,7 +131,7 @@ function PharmacyList({
             "❌ Bạn đã từ chối quyền định vị! Hãy bật lại trong phần cài đặt trình duyệt."
           );
         } else if (err.code === 2) {
-          alert("⚠️ Không thể xác định vị trí (mạng yếu hoặc GPS tắt).");
+          alert("⚠️ Không thể xác định vị trí, mạng yếu hoặc GPS tắt.");
         } else {
           alert("❌ Lỗi không xác định khi lấy vị trí!");
         }
@@ -83,31 +143,6 @@ function PharmacyList({
       }
     );
   };
-
-  const searchedItems = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) return items;
-
-    return items.filter((item) => {
-      const name = item.name?.toLowerCase() || "";
-      const address = item.address?.toLowerCase() || "";
-      return name.includes(keyword) || address.includes(keyword);
-    });
-  }, [items, search]);
-
-  useEffect(() => {
-    setFiltered(searchedItems);
-
-    if (searchedItems.length === 1) {
-      const only = searchedItems[0];
-      setSelectedPharmacy({
-        lat: Number(only.lat),
-        lon: Number(only.lon),
-        ...only,
-      });
-    }
-  }, [searchedItems, setSelectedPharmacy]);
 
   const handleFilterNearby = () => {
     if (!userLocation) {
@@ -121,29 +156,11 @@ function PharmacyList({
     }
 
     setRadiusKm(radius);
+    setNearbyMode(true);
+  };
 
-    const withDistance = searchedItems.map((item) => {
-      const d = distanceKm(
-        userLocation.lat,
-        userLocation.lon,
-        Number(item.lat),
-        Number(item.lon)
-      );
-
-      return {
-        ...item,
-        distance: d,
-      };
-    });
-
-    let nearby = withDistance.filter((item) => item.distance <= radius);
-
-    if (sortByDistance) {
-      nearby = [...nearby].sort((a, b) => a.distance - b.distance);
-    }
-
-    setFiltered(nearby);
-    alert(`✅ Đã lọc ${nearby.length} nhà thuốc trong bán kính ${radius} km.`);
+  const handleClearNearby = () => {
+    setNearbyMode(false);
   };
 
   const quickRadiusOptions = [1, 3, 5, 10];
@@ -199,6 +216,24 @@ function PharmacyList({
           >
             🚀 Lọc gần tôi
           </button>
+
+          {nearbyMode && (
+            <button
+              onClick={handleClearNearby}
+              style={{
+                background: "#f97316",
+                color: "white",
+                border: "none",
+                padding: "10px 12px",
+                borderRadius: "10px",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: "15px",
+              }}
+            >
+              ↩️ Bỏ lọc gần tôi
+            </button>
+          )}
         </div>
 
         <div
@@ -257,6 +292,7 @@ function PharmacyList({
                 outline: "none",
               }}
             />
+
             <span
               style={{
                 fontSize: "14px",
@@ -282,7 +318,10 @@ function PharmacyList({
                 type="button"
                 onClick={() => setRadius(value)}
                 style={{
-                  border: radius === value ? "1px solid #2563eb" : "1px solid #d1d5db",
+                  border:
+                    radius === value
+                      ? "1px solid #2563eb"
+                      : "1px solid #d1d5db",
                   background: radius === value ? "#eff6ff" : "#fff",
                   color: radius === value ? "#2563eb" : "#374151",
                   borderRadius: "999px",
@@ -355,6 +394,15 @@ function PharmacyList({
         <span style={{ color: "#16a34a", fontWeight: 700 }}>
           {filtered.length}
         </span>
+        {nearbyMode && (
+          <>
+            <br />
+            📍 Đang lọc gần tôi trong bán kính:{" "}
+            <span style={{ color: "#f97316", fontWeight: 700 }}>
+              {radius} km
+            </span>
+          </>
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -368,7 +416,7 @@ function PharmacyList({
 
           return (
             <div
-              key={`${item.name || "pharmacy"}-${item.lat}-${item.lon}-${i}`}
+              key={`${item.id || item.name || "pharmacy"}-${item.lat}-${item.lon}-${i}`}
               onClick={() =>
                 setSelectedPharmacy({
                   lat: Number(item.lat),
@@ -398,6 +446,18 @@ function PharmacyList({
               <p style={{ margin: "0 0 4px 0" }}>
                 ⭐ {item.rating ?? "Chưa có rating"}
               </p>
+
+              {item.is_surveyed && (
+                <p
+                  style={{
+                    margin: "0 0 4px 0",
+                    color: "#16a34a",
+                    fontWeight: 700,
+                  }}
+                >
+                  ✅ Đã khảo sát
+                </p>
+              )}
 
               {dist && (
                 <p style={{ margin: 0, color: "#555", fontWeight: 500 }}>

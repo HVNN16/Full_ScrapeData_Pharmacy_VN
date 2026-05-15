@@ -10,6 +10,7 @@
 // export default function HomePage() {
 //   const [initialLoading, setInitialLoading] = useState(true);
 //   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+//   const [visibleMapCount, setVisibleMapCount] = useState(0);
 
 //   const [provinces, setProvinces] = useState([]);
 //   const [province, setProvince] = useState("");
@@ -68,10 +69,10 @@
 //     }
 //   }, [canUseAdvancedTools]);
 
-//   const confirmLogout = () => {
+//   const confirmLogout = useCallback(() => {
 //     localStorage.clear();
 //     window.location.href = "/";
-//   };
+//   }, []);
 
 //   const handleToggleHeatmap = () => {
 //     if (!canUseAdvancedTools) return;
@@ -244,6 +245,7 @@
 //           setSelectedPharmacy={setSelectedPharmacy}
 //           setUserLocation={setUserLocation}
 //           setRadiusKm={setRadiusKm}
+//           visibleMapCount={visibleMapCount}
 //         />
 //       </div>
 //     );
@@ -319,6 +321,7 @@
 //               radiusKm={radiusKm}
 //               showHeatmap={canUseAdvancedTools ? showHeatmap : false}
 //               onInitialLoaded={handleInitialLoaded}
+//               onVisibleCountChange={setVisibleMapCount}
 //             />
 //           </div>
 
@@ -340,9 +343,7 @@
 //             onClick={(e) => e.stopPropagation()}
 //           >
 //             <div className="logout-popup-icon">🚪</div>
-
 //             <h2 className="logout-popup-title">Xác nhận đăng xuất</h2>
-
 //             <p className="logout-popup-text">
 //               Bạn có chắc muốn đăng xuất khỏi hệ thống không?
 //             </p>
@@ -365,6 +366,7 @@
 //     </>
 //   );
 // }
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchProvinces } from "../api";
 import MapView from "../components/MapView";
@@ -378,6 +380,7 @@ export default function HomePage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
   const [visibleMapCount, setVisibleMapCount] = useState(0);
+  const [visibleFeatures, setVisibleFeatures] = useState([]);
 
   const [provinces, setProvinces] = useState([]);
   const [province, setProvince] = useState("");
@@ -401,6 +404,14 @@ export default function HomePage() {
 
   const handleInitialLoaded = useCallback(() => {
     setInitialLoading(false);
+  }, []);
+
+  const handleVisibleCountChange = useCallback((count) => {
+    setVisibleMapCount(count);
+  }, []);
+
+  const handleFeaturesChange = useCallback((features) => {
+    setVisibleFeatures(Array.isArray(features) ? features : []);
   }, []);
 
   const normalizeProvinceName = (name) => {
@@ -613,6 +624,7 @@ export default function HomePage() {
           setUserLocation={setUserLocation}
           setRadiusKm={setRadiusKm}
           visibleMapCount={visibleMapCount}
+          features={visibleFeatures}
         />
       </div>
     );
@@ -688,7 +700,8 @@ export default function HomePage() {
               radiusKm={radiusKm}
               showHeatmap={canUseAdvancedTools ? showHeatmap : false}
               onInitialLoaded={handleInitialLoaded}
-              onVisibleCountChange={setVisibleMapCount}
+              onVisibleCountChange={handleVisibleCountChange}
+              onFeaturesChange={handleFeaturesChange}
             />
           </div>
 

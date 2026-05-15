@@ -226,7 +226,7 @@ function MapViewportWatcher({ onViewportChange, disabled }) {
         ].join(",");
 
         onViewportChange({ bbox });
-      }, 300);
+      }, 350);
     };
 
     map.on("moveend", update);
@@ -260,6 +260,7 @@ function MapView({
   showHeatmap,
   onInitialLoaded,
   onVisibleCountChange,
+  onFeaturesChange,
 }) {
   const [features, setFeatures] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -360,6 +361,9 @@ function MapView({
     }
 
     setPolygonCoords(null);
+    setFeatures(null);
+    onFeaturesChange?.([]);
+    onVisibleCountChange?.(0);
     setReloadKey(Date.now());
 
     if (!userId) {
@@ -418,8 +422,9 @@ function MapView({
 
   useEffect(() => {
     setFeatures(null);
+    onFeaturesChange?.([]);
     onVisibleCountChange?.(0);
-  }, [province, district, ratingMin, onVisibleCountChange]);
+  }, [province, district, ratingMin, onVisibleCountChange, onFeaturesChange]);
 
   const handleViewportChange = useCallback(({ bbox }) => {
     setBbox((prev) => (prev === bbox ? prev : bbox));
@@ -449,8 +454,11 @@ function MapView({
     setPolygonCoords(null);
     setSelectedAreaId("");
     setAreaName("");
+    setFeatures(null);
+    onFeaturesChange?.([]);
+    onVisibleCountChange?.(0);
     setReloadKey(Date.now());
-  }, []);
+  }, [onFeaturesChange, onVisibleCountChange]);
 
   const handlePolygonCreated = useCallback(
     (e) => {
@@ -471,10 +479,13 @@ function MapView({
       setSelectedAreaId("");
       setAreaName("");
       setPolygonCoords([...coords]);
+      setFeatures(null);
+      onFeaturesChange?.([]);
+      onVisibleCountChange?.(0);
       setReloadKey(Date.now());
       showToast("Đã tạo vùng khảo sát", "success");
     },
-    [showToast]
+    [showToast, onFeaturesChange, onVisibleCountChange]
   );
 
   const handlePolygonEdited = useCallback(
@@ -491,6 +502,9 @@ function MapView({
       }
 
       setPolygonCoords([...editedCoords]);
+      setFeatures(null);
+      onFeaturesChange?.([]);
+      onVisibleCountChange?.(0);
       setReloadKey(Date.now());
 
       if (selectedAreaId) {
@@ -526,6 +540,8 @@ function MapView({
       selectedUserId,
       reloadAreasAfterChange,
       showToast,
+      onFeaturesChange,
+      onVisibleCountChange,
     ]
   );
 
@@ -533,9 +549,12 @@ function MapView({
     setPolygonCoords(null);
     setSelectedAreaId("");
     setAreaName("");
+    setFeatures(null);
+    onFeaturesChange?.([]);
+    onVisibleCountChange?.(0);
     setReloadKey(Date.now());
     showToast("Đã xoá vùng đang chọn", "success");
-  }, [showToast]);
+  }, [showToast, onFeaturesChange, onVisibleCountChange]);
 
   const handleSaveArea = async () => {
     if (!polygonObject) {
@@ -600,6 +619,9 @@ function MapView({
     setShowPanel(true);
     setAreaName(area.name || "");
     setPolygonCoords(coords);
+    setFeatures(null);
+    onFeaturesChange?.([]);
+    onVisibleCountChange?.(0);
     addEditablePolygonToMap(coords);
     setReloadKey(Date.now());
     showToast(`Đã mở vùng: ${area.name}`, "success");
@@ -640,29 +662,55 @@ function MapView({
       try {
         if (!bbox && !isUsingPolygon) return;
 
-        if (active) setLoading(true);
-
-        const params = {
-          province,
-          district,
-          rating_min: ratingMin || 0,
-        };
-
-        if (isUsingPolygon && polygonParam) {
-          params.polygon = polygonParam;
-        } else {
-          params.bbox = bbox;
+        if (active) {
+          setLoading(true);
+          // setFeatures(null);
+          // onFeaturesChange?.([]);
+          // onVisibleCountChange?.(0);
         }
+
+        // const params = {
+        //   province,
+        //   district,
+        //   rating_min: ratingMin || 0,
+        // };
+
+        // if (isUsingPolygon && polygonParam) {
+        //   params.polygon = polygonParam;
+        // } else {
+        //   params.bbox = bbox;
+        // }
+        const params = {
+  province,
+  district,
+  rating_min: ratingMin || 0,
+};
+
+if (isUsingPolygon && polygonParam) {
+  params.polygon = polygonParam;
+  params.limit = 8000;
+} else {
+  params.bbox = bbox;
+
+  if (!province && !district && !ratingMin) {
+    params.mode = "overview";
+    params.limit = 20000;
+  } else {
+    params.limit = 20000;
+  }
+}
 
         const data = await fetchGeoJSON(params);
 
         if (!active) return;
 
-        setFeatures(data);
+        const nextFeatures = Array.isArray(data?.features)
+          ? data.features
+          : [];
 
-        onVisibleCountChange?.(
-          Array.isArray(data?.features) ? data.features.length : 0
-        );
+        setFeatures(data);
+        onFeaturesChange?.(nextFeatures);
+        onVisibleCountChange?.(nextFeatures.length);
 
         if (!hasReportedInitialLoad.current) {
           hasReportedInitialLoad.current = true;
@@ -670,6 +718,12 @@ function MapView({
         }
       } catch (e) {
         console.error("fetchGeoJSON error:", e);
+
+        if (active) {
+          setFeatures(null);
+          onFeaturesChange?.([]);
+          onVisibleCountChange?.(0);
+        }
 
         if (!hasReportedInitialLoad.current) {
           hasReportedInitialLoad.current = true;
@@ -695,6 +749,7 @@ function MapView({
     polygonParam,
     onInitialLoaded,
     onVisibleCountChange,
+    onFeaturesChange,
     showToast,
   ]);
 

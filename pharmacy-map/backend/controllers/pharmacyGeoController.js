@@ -5,9 +5,13 @@ const TABLE_NAME = "pharmacy_stores_cleaned";
 const LAT_COL = "latitude";
 const LNG_COL = "longitude";
 
+const DEFAULT_LIMIT = 10000;
+const MAX_LIMIT = 20000;
+
 const parseLimit = (value) => {
   const n = parseInt(value, 10);
-  return Number.isInteger(n) && n > 0 ? n : null;
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return Math.min(n, MAX_LIMIT);
 };
 
 const parseBBox = (bbox) => {
@@ -22,6 +26,94 @@ const parseBBox = (bbox) => {
   const [minLng, minLat, maxLng, maxLat] = parts;
 
   return { minLng, minLat, maxLng, maxLat };
+};
+
+const parsePolygon = (polygon) => {
+  if (!polygon) return null;
+
+  try {
+    const parsed = JSON.parse(polygon);
+    const coords = parsed?.coordinates?.[0];
+
+    if (!Array.isArray(coords) || coords.length < 4) return null;
+
+    const cleanCoords = coords
+      .map((p) => [Number(p[0]), Number(p[1])])
+      .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
+
+    if (cleanCoords.length < 4) return null;
+
+    return cleanCoords;
+  } catch (err) {
+    console.error("❌ Polygon parse error:", err.message);
+    return null;
+  }
+};
+
+const getPolygonBBox = (polygonCoords) => {
+  if (!Array.isArray(polygonCoords) || polygonCoords.length < 3) return null;
+
+  const lngs = polygonCoords.map((p) => p[0]);
+  const lats = polygonCoords.map((p) => p[1]);
+
+  return {
+    minLng: Math.min(...lngs),
+    maxLng: Math.max(...lngs),
+    minLat: Math.min(...lats),
+    maxLat: Math.max(...lats),
+  };
+};
+
+const isPointInPolygon = (point, polygon) => {
+  const [x, y] = point;
+  let inside = false;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0];
+    const yi = polygon[i][1];
+    const xj = polygon[j][0];
+    const yj = polygon[j][1];
+
+    const intersect =
+      yi > y !== yj > y &&
+      x < ((xj - xi) * (y - yi)) / ((yj - yi) || 0.000000001) + xi;
+
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+};
+
+const rowsToGeoJSON = (rows) => {
+  const features = rows
+    .filter((row) => row.id && row.lat && row.lng)
+    .map((row) => ({
+      type: "Feature",
+      geometry: {
+        type: "Point",
+        coordinates: [Number(row.lng), Number(row.lat)],
+      },
+      properties: {
+        id: row.id,
+        name: row.name || "",
+        address: row.address || "",
+        province: row.province || "",
+        district: row.district || "",
+        phone: row.phone || "",
+        status: row.status || "",
+        rating: row.rating === null ? null : Number(row.rating),
+        image_url: row.image_url || "",
+        product_groups: row.product_groups || [],
+        is_surveyed: row.is_surveyed || false,
+        surveyed_at: row.surveyed_at || null,
+        surveyed_by: row.surveyed_by || null,
+      },
+    }));
+
+  return {
+    type: "FeatureCollection",
+    features,
+  };
 };
 
 export const getPharmacyCount = async (req, res) => {
@@ -50,13 +142,29 @@ export const getPharmacyCount = async (req, res) => {
 
 export const getPharmaciesGeoJSON = async (req, res) => {
   try {
-    const { bbox, mode, search, province, district, rating_min } = req.query;
+    const {
+      bbox,
+      mode,
+      search,
+      province,
+      district,
+      rating_min,
+      polygon,
+    } = req.query;
 
-    const limit = parseLimit(req.query.limit);
+    const requestLimit = parseLimit(req.query.limit);
     const parsedBBox = parseBBox(bbox);
+    const polygonCoords = parsePolygon(polygon);
+    const polygonBBox = getPolygonBBox(polygonCoords);
+
+    const isPolygonMode = Array.isArray(polygonCoords) && polygonCoords.length >= 4;
 
     const isOverviewMode =
-      mode === "overview" && !search && !province && !district;
+      mode === "overview" &&
+      !search &&
+      !province &&
+      !district &&
+      !isPolygonMode;
 
     const tableSource = isOverviewMode
       ? `${TABLE_NAME} TABLESAMPLE BERNOULLI (90) REPEATABLE (10)`
@@ -72,17 +180,19 @@ export const getPharmaciesGeoJSON = async (req, res) => {
         AND ${LNG_COL} != 0
     `;
 
-    if (parsedBBox) {
+    const activeBBox = isPolygonMode ? polygonBBox : parsedBBox;
+
+    if (activeBBox) {
       whereSql += `
         AND ${LNG_COL} BETWEEN $${index++} AND $${index++}
         AND ${LAT_COL} BETWEEN $${index++} AND $${index++}
       `;
 
       values.push(
-        parsedBBox.minLng,
-        parsedBBox.maxLng,
-        parsedBBox.minLat,
-        parsedBBox.maxLat
+        activeBBox.minLng,
+        activeBBox.maxLng,
+        activeBBox.minLat,
+        activeBBox.maxLat
       );
     }
 
@@ -95,6 +205,7 @@ export const getPharmaciesGeoJSON = async (req, res) => {
           OR LOWER(district) LIKE LOWER($${index})
         )
       `;
+
       values.push(`%${search}%`);
       index++;
     }
@@ -139,42 +250,26 @@ export const getPharmaciesGeoJSON = async (req, res) => {
       sql += ` ORDER BY id ASC`;
     }
 
-    if (limit) {
+    if (!isPolygonMode) {
+      const finalLimit = requestLimit || DEFAULT_LIMIT;
       sql += ` LIMIT $${index++}`;
-      values.push(limit);
+      values.push(finalLimit);
     }
 
     const { rows } = await pool.query(sql, values);
 
-    const features = rows
-      .filter((row) => row.id && row.lat && row.lng)
-      .map((row) => ({
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: [Number(row.lng), Number(row.lat)],
-        },
-        properties: {
-          id: row.id,
-          name: row.name || "",
-          address: row.address || "",
-          province: row.province || "",
-          district: row.district || "",
-          phone: row.phone || "",
-          status: row.status || "",
-          rating: row.rating === null ? null : Number(row.rating),
-          image_url: row.image_url || "",
-          product_groups: row.product_groups || [],
-          is_surveyed: row.is_surveyed || false,
-          surveyed_at: row.surveyed_at || null,
-          surveyed_by: row.surveyed_by || null,
-        },
-      }));
+    const finalRows = isPolygonMode
+      ? rows
+          .filter((row) =>
+            isPointInPolygon(
+              [Number(row.lng), Number(row.lat)],
+              polygonCoords
+            )
+          )
+          .slice(0, requestLimit || MAX_LIMIT)
+      : rows;
 
-    res.json({
-      type: "FeatureCollection",
-      features,
-    });
+    res.json(rowsToGeoJSON(finalRows));
   } catch (err) {
     console.error("❌ Lỗi getPharmaciesGeoJSON:", err);
 
@@ -189,7 +284,7 @@ export const getPharmaciesList = async (req, res) => {
   try {
     const { search, province, district, rating_min } = req.query;
 
-    const limit = parseLimit(req.query.limit);
+    const limit = parseLimit(req.query.limit) || DEFAULT_LIMIT;
 
     const values = [];
     let index = 1;
@@ -246,12 +341,8 @@ export const getPharmaciesList = async (req, res) => {
       values.push(Number(rating_min));
     }
 
-    sql += ` ORDER BY id ASC`;
-
-    if (limit) {
-      sql += ` LIMIT $${index++}`;
-      values.push(limit);
-    }
+    sql += ` ORDER BY id ASC LIMIT $${index++}`;
+    values.push(limit);
 
     const { rows } = await pool.query(sql, values);
 
@@ -308,6 +399,8 @@ export const getHeatmap = async (req, res) => {
       sql += ` AND rating >= $${index++}`;
       values.push(Number(rating_min));
     }
+
+    sql += ` LIMIT 8000`;
 
     const { rows } = await pool.query(sql, values);
 
