@@ -84,6 +84,30 @@ const isPointInPolygon = (point, polygon) => {
   return inside;
 };
 
+const normalizeProductGroups = (value) => {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v).trim()).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.map((v) => String(v).trim()).filter(Boolean);
+      }
+    } catch (_) {}
+
+    return value
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
 const rowsToGeoJSON = (rows) => {
   const features = rows
     .filter((row) => row.id && row.lat && row.lng)
@@ -104,6 +128,7 @@ const rowsToGeoJSON = (rows) => {
         rating: row.rating === null ? null : Number(row.rating),
         image_url: row.image_url || "",
         product_groups: row.product_groups || [],
+        owner_name: row.owner_name || "",
         is_surveyed: row.is_surveyed || false,
         surveyed_at: row.surveyed_at || null,
         surveyed_by: row.surveyed_by || null,
@@ -157,7 +182,8 @@ export const getPharmaciesGeoJSON = async (req, res) => {
     const polygonCoords = parsePolygon(polygon);
     const polygonBBox = getPolygonBBox(polygonCoords);
 
-    const isPolygonMode = Array.isArray(polygonCoords) && polygonCoords.length >= 4;
+    const isPolygonMode =
+      Array.isArray(polygonCoords) && polygonCoords.length >= 4;
 
     const isOverviewMode =
       mode === "overview" &&
@@ -237,6 +263,7 @@ export const getPharmaciesGeoJSON = async (req, res) => {
         rating,
         COALESCE(image_url, image) AS image_url,
         product_groups,
+        owner_name,
         is_surveyed,
         surveyed_at,
         surveyed_by,
@@ -301,6 +328,7 @@ export const getPharmaciesList = async (req, res) => {
         rating,
         COALESCE(image_url, image) AS image_url,
         product_groups,
+        owner_name,
         is_surveyed,
         surveyed_at,
         surveyed_by,
@@ -346,12 +374,17 @@ export const getPharmaciesList = async (req, res) => {
 
     const { rows } = await pool.query(sql, values);
 
-    res.json(rows);
+    res.json(rows.map((row) => ({
+      ...row,
+      rating: row.rating === null ? null : Number(row.rating),
+      product_groups: row.product_groups || [],
+      owner_name: row.owner_name || "",
+    })));
   } catch (err) {
     console.error("❌ Lỗi getPharmaciesList:", err);
 
     res.status(500).json({
-      message: "Lỗi server khi lấy danh sách nhà thuốc",
+      message: "Lỗi lấy danh sách nhà thuốc",
       error: err.message,
     });
   }
@@ -359,7 +392,8 @@ export const getPharmaciesList = async (req, res) => {
 
 export const getHeatmap = async (req, res) => {
   try {
-    const { bbox, province, rating_min } = req.query;
+    const { province, rating_min, bbox } = req.query;
+
     const parsedBBox = parseBBox(bbox);
 
     const values = [];
@@ -368,7 +402,8 @@ export const getHeatmap = async (req, res) => {
     let sql = `
       SELECT 
         ${LAT_COL} AS lat,
-        ${LNG_COL} AS lng
+        ${LNG_COL} AS lng,
+        rating
       FROM ${TABLE_NAME}
       WHERE ${LAT_COL} IS NOT NULL
         AND ${LNG_COL} IS NOT NULL
@@ -400,22 +435,16 @@ export const getHeatmap = async (req, res) => {
       values.push(Number(rating_min));
     }
 
-    sql += ` LIMIT 8000`;
+    sql += ` LIMIT 15000`;
 
     const { rows } = await pool.query(sql, values);
 
-    res.json(
-      rows.map((row) => ({
-        lat: Number(row.lat),
-        lng: Number(row.lng),
-        intensity: 1,
-      }))
-    );
+    res.json(rows);
   } catch (err) {
     console.error("❌ Lỗi getHeatmap:", err);
 
     res.status(500).json({
-      message: "Lỗi server khi lấy heatmap",
+      message: "Lỗi lấy heatmap",
       error: err.message,
     });
   }
@@ -435,35 +464,36 @@ export const updatePharmacy = async (req, res) => {
       rating,
       image_url,
       product_groups,
+      owner_name,
     } = req.body;
 
-    const surveyedBy = req.user?.id || null;
-
-    if (!id) {
+    if (!id || Number.isNaN(Number(id))) {
       return res.status(400).json({
-        message: "Thiếu id nhà thuốc",
+        message: "ID nhà thuốc không hợp lệ",
       });
     }
+
+    const normalizedProducts = normalizeProductGroups(product_groups);
 
     const sql = `
       UPDATE ${TABLE_NAME}
       SET
-        name = COALESCE($1, name),
-        address = COALESCE($2, address),
-        province = COALESCE($3, province),
-        district = COALESCE($4, district),
-        phone = COALESCE($5, phone),
-        status = COALESCE($6, status),
-        rating = COALESCE($7, rating),
-        image_url = COALESCE($8, image_url),
-        image = COALESCE($8, image),
-        product_groups = COALESCE($9::jsonb, product_groups),
-        is_surveyed = TRUE,
+        name = $1,
+        address = $2,
+        province = $3,
+        district = $4,
+        phone = $5,
+        status = $6,
+        rating = $7,
+        image_url = $8,
+        image = $8,
+        product_groups = $9,
+        owner_name = $10,
+        is_surveyed = true,
         surveyed_at = NOW(),
-        surveyed_by = COALESCE($10, surveyed_by),
-        updated_at = NOW()
-      WHERE id = $11
-      RETURNING 
+        surveyed_by = $11
+      WHERE id = $12
+      RETURNING
         id,
         name,
         address,
@@ -474,39 +504,41 @@ export const updatePharmacy = async (req, res) => {
         rating,
         COALESCE(image_url, image) AS image_url,
         product_groups,
+        owner_name,
         is_surveyed,
         surveyed_at,
         surveyed_by,
-        updated_at,
         ${LAT_COL} AS lat,
         ${LNG_COL} AS lng;
     `;
 
     const values = [
-      name === undefined || name === "" ? null : name,
-      address === undefined || address === "" ? null : address,
-      province === undefined || province === "" ? null : province,
-      district === undefined || district === "" ? null : district,
-      phone === undefined || phone === "" ? null : phone,
-      status === undefined || status === "" ? null : status,
-      rating === undefined || rating === null || rating === ""
+      name || "",
+      address || "",
+      province || "",
+      district || "",
+      phone || "",
+      status || "",
+      rating === null || rating === undefined || rating === ""
         ? null
         : Number(rating),
-      image_url === undefined || image_url === "" ? null : image_url,
-      Array.isArray(product_groups) ? JSON.stringify(product_groups) : null,
-      surveyedBy,
-      id,
+      image_url || "",
+      JSON.stringify(normalizedProducts),
+      owner_name || "",
+      req.user?.id || null,
+      Number(id),
     ];
 
     const { rows } = await pool.query(sql, values);
 
-    if (rows.length === 0) {
+    if (!rows.length) {
       return res.status(404).json({
         message: "Không tìm thấy nhà thuốc",
       });
     }
 
     res.json({
+      success: true,
       message: "Cập nhật nhà thuốc thành công",
       pharmacy: rows[0],
     });
@@ -514,7 +546,7 @@ export const updatePharmacy = async (req, res) => {
     console.error("❌ Lỗi updatePharmacy:", err);
 
     res.status(500).json({
-      message: "Lỗi server khi cập nhật nhà thuốc",
+      message: "Lỗi cập nhật nhà thuốc",
       error: err.message,
     });
   }
