@@ -461,32 +461,36 @@ function MapView({
   }, [onFeaturesChange, onVisibleCountChange]);
 
   const handlePolygonCreated = useCallback(
-    (e) => {
-      const layer = e.layer;
-      const coords = getLayerCoords(layer);
+  (e) => {
+    // reset bộ lọc tỉnh/huyện khi vẽ polygon
+    window.dispatchEvent(new Event("resetMapFilters"));
 
-      if (coords.length < 3) {
-        showToast("Vùng khảo sát cần ít nhất 3 điểm", "error");
-        return;
-      }
+    const layer = e.layer;
+    const coords = getLayerCoords(layer);
 
-      if (featureGroupRef.current) {
-        featureGroupRef.current.clearLayers();
-        featureGroupRef.current.addLayer(layer);
-      }
+    if (coords.length < 3) {
+      showToast("Vùng khảo sát cần ít nhất 3 điểm", "error");
+      return;
+    }
 
-      setShowPanel(true);
-      setSelectedAreaId("");
-      setAreaName("");
-      setPolygonCoords([...coords]);
-      setFeatures(null);
-      onFeaturesChange?.([]);
-      onVisibleCountChange?.(0);
-      setReloadKey(Date.now());
-      showToast("Đã tạo vùng khảo sát", "success");
-    },
-    [showToast, onFeaturesChange, onVisibleCountChange]
-  );
+    if (featureGroupRef.current) {
+      featureGroupRef.current.clearLayers();
+      featureGroupRef.current.addLayer(layer);
+    }
+
+    setShowPanel(true);
+    setSelectedAreaId("");
+    setAreaName("");
+    setPolygonCoords([...coords]);
+    setFeatures(null);
+    onFeaturesChange?.([]);
+    onVisibleCountChange?.(0);
+    setReloadKey(Date.now());
+
+    showToast("Đã tạo vùng khảo sát", "success");
+  },
+  [showToast, onFeaturesChange, onVisibleCountChange]
+);
 
   const handlePolygonEdited = useCallback(
     async (e) => {
