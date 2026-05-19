@@ -1,6 +1,6 @@
 import { pool } from "../db.js";
 
-const TABLE_NAME = "pharmacy_stores_cleaned";
+const TABLE_NAME = "public.pharmacy_stores_cleaned";
 
 const LAT_COL = "latitude";
 const LNG_COL = "longitude";

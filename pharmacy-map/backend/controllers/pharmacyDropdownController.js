@@ -4,7 +4,7 @@ import { pool } from "../db.js";
 export const getProvinces = async (_req, res) => {
   const { rows } = await pool.query(`
     SELECT DISTINCT province
-    FROM pharmacy_stores_cleaned
+    FROM public.pharmacy_stores_cleaned
     WHERE province IS NOT NULL
     ORDER BY province;
   `);
