@@ -34,7 +34,7 @@ export const register = async (req, res) => {
       `
       INSERT INTO users(fullname, email, password, role)
       VALUES ($1, $2, $3, $4)
-      RETURNING id, fullname, email, role
+      RETURNING id, fullname, email, role, company_id, is_active
       `,
       [fullname, email, hashed, "user"]
     );
@@ -46,7 +46,6 @@ export const register = async (req, res) => {
     });
   } catch (err) {
     console.error("REGISTER ERROR:", err);
-
     return res.status(500).json({
       success: false,
       message: "Lỗi server khi đăng ký",
@@ -82,6 +81,13 @@ export const login = async (req, res) => {
 
     const user = result.rows[0];
 
+    if (user.is_active === false) {
+      return res.status(403).json({
+        success: false,
+        message: "Tài khoản đã bị khóa!",
+      });
+    }
+
     const valid = await bcrypt.compare(password, user.password);
 
     if (!valid) {
@@ -104,6 +110,7 @@ export const login = async (req, res) => {
         email: user.email,
         role: user.role,
         fullname: user.fullname,
+        company_id: user.company_id,
       },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
@@ -118,14 +125,116 @@ export const login = async (req, res) => {
         fullname: user.fullname,
         email: user.email,
         role: user.role,
+        company_id: user.company_id,
+        is_active: user.is_active,
       },
     });
   } catch (err) {
     console.error("LOGIN ERROR:", err);
-
     return res.status(500).json({
       success: false,
       message: "Lỗi server khi đăng nhập",
+      error: err.message,
+    });
+  }
+};
+
+// ================= COMPANY CREATE STAFF =================
+export const createCompanyStaff = async (req, res) => {
+  try {
+    if (req.user.role !== "company") {
+      return res.status(403).json({
+        success: false,
+        message: "Chỉ company mới được tạo nhân viên!",
+      });
+    }
+
+    const fullname = req.body.fullname?.trim();
+    const email = req.body.email?.trim().toLowerCase();
+    const password = req.body.password?.trim();
+
+    if (!fullname || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin nhân viên!",
+      });
+    }
+
+    const check = await pool.query(
+      "SELECT id FROM users WHERE LOWER(email) = LOWER($1)",
+      [email]
+    );
+
+    if (check.rowCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Email đã tồn tại!",
+      });
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      `
+      INSERT INTO users(fullname, email, password, role, company_id, is_active)
+      VALUES ($1, $2, $3, 'company_staff', $4, true)
+      RETURNING id, fullname, email, role, company_id, is_active, created_at
+      `,
+      [fullname, email, hashed, req.user.id]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Tạo nhân viên thành công!",
+      user: result.rows[0],
+    });
+  } catch (err) {
+    console.error("CREATE STAFF ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server khi tạo nhân viên",
+      error: err.message,
+    });
+  }
+};
+
+// ================= COMPANY GET STAFF =================
+export const getCompanyStaff = async (req, res) => {
+  try {
+    if (req.user.role !== "company") {
+      return res.status(403).json({
+        success: false,
+        message: "Chỉ company mới được xem danh sách nhân viên!",
+      });
+    }
+
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        id,
+        fullname,
+        email,
+        role,
+        company_id,
+        is_active,
+        created_at
+      FROM users
+      WHERE role = 'company_staff'
+        AND company_id = $1
+      ORDER BY created_at DESC
+      `,
+      [req.user.id]
+    );
+
+    return res.json({
+      success: true,
+      data: rows,
+    });
+  } catch (err) {
+    console.error("GET COMPANY STAFF ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server khi lấy danh sách nhân viên",
       error: err.message,
     });
   }

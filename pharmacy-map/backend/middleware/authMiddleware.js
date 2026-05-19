@@ -23,6 +23,24 @@ export const verifyAdmin = (req, res, next) => {
   next();
 };
 
+export const verifyCompany = (req, res, next) => {
+  if (req.user.role !== "company") {
+    return res.status(403).json({
+      message: "Chỉ công ty mới được truy cập!",
+    });
+  }
+  next();
+};
+
+export const verifyCompanyOrStaff = (req, res, next) => {
+  if (!["company", "company_staff"].includes(req.user.role)) {
+    return res.status(403).json({
+      message: "Chỉ công ty hoặc nhân viên công ty mới được truy cập!",
+    });
+  }
+  next();
+};
+
 export const verifyExportRole = (req, res, next) => {
   if (!["admin", "company"].includes(req.user.role)) {
     return res.status(403).json({

@@ -1,15 +1,36 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchProvinces } from "../api";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import L from "leaflet";
+
+import { fetchProvinces, getAssignedSurveyAreas } from "../api";
 import MapView from "../components/MapView";
 import PharmacyList from "../components/PharmacyList";
-import PROVINCE_DISTRICTS from "../data/provinceDistricts";
 import ProvinceStats from "../components/ProvinceStats";
 import ExportCSV from "../components/ExportCSV";
 import LoadingScreen from "../components/LoadingScreen";
 
+import PROVINCE_DISTRICTS from "../data/provinceDistricts";
+
+function extractStaffCompanyName(areas) {
+  if (!Array.isArray(areas) || !areas.length) return "";
+
+  return (
+    areas[0]?.company_name ||
+    areas[0]?.company_fullname ||
+    areas[0]?.company_email ||
+    ""
+  );
+}
+
 export default function HomePage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+
   const [visibleMapCount, setVisibleMapCount] = useState(0);
   const [visibleFeatures, setVisibleFeatures] = useState([]);
 
@@ -18,36 +39,129 @@ export default function HomePage() {
   const [districts, setDistricts] = useState([]);
   const [district, setDistrict] = useState("");
   const [ratingMin, setRatingMin] = useState("");
+
   const [selectedPharmacy, setSelectedPharmacy] = useState(null);
+
   const [showStats, setShowStats] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
+
   const [userLocation, setUserLocation] = useState(null);
   const [radiusKm, setRadiusKm] = useState(5);
-  const [menuOpen, setMenuOpen] = useState(false);
-  useEffect(() => {
-  const resetFilters = () => {
-    setProvince("");
-    setDistrict("");
-    setRatingMin("");
-  };
 
-  window.addEventListener("resetMapFilters", resetFilters);
+  const [menuOpen] = useState(false);
+  const mapRef = useRef(null);
 
-  return () => {
-    window.removeEventListener("resetMapFilters", resetFilters);
-  };
-}, []);
+  const [assignedAreas, setAssignedAreas] = useState([]);
+  const [selectedAssignedAreaId, setSelectedAssignedAreaId] = useState("");
+  const [selectedPolygon, setSelectedPolygon] = useState(null);
+  const [staffCompanyName, setStaffCompanyName] = useState("");
+
   const isLoggedIn = !!localStorage.getItem("token");
   const fullname = localStorage.getItem("fullname") || "Người dùng";
   const role = localStorage.getItem("role") || "user";
+
+  const isCompanyStaff = role === "company_staff";
+
+  const selectedAssignedArea = useMemo(() => {
+    if (!selectedAssignedAreaId) return null;
+
+    return assignedAreas.find(
+      (area) => String(area.id) === String(selectedAssignedAreaId)
+    );
+  }, [assignedAreas, selectedAssignedAreaId]);
 
   const canUseAdvancedTools = useMemo(() => {
     return role === "admin" || role === "company";
   }, [role]);
 
-  const handleInitialLoaded = useCallback(() => {
-    setInitialLoading(false);
+  useEffect(() => {
+    const saved = localStorage.getItem("company_selected_area");
+
+    if (!saved) return;
+
+    try {
+      const area = JSON.parse(saved);
+
+      if (area?.polygon) {
+        setSelectedPolygon(area.polygon);
+      }
+
+      localStorage.removeItem("company_selected_area");
+    } catch (err) {
+      console.error("Lỗi đọc polygon company:", err);
+    }
   }, []);
+
+  useEffect(() => {
+    const resetFilters = () => {
+      setProvince("");
+      setDistrict("");
+      setRatingMin("");
+    };
+
+    window.addEventListener("resetMapFilters", resetFilters);
+
+    return () => {
+      window.removeEventListener("resetMapFilters", resetFilters);
+    };
+  }, []);
+
+  useEffect(() => {
+    fetchProvinces()
+      .then(setProvinces)
+      .catch((err) => {
+        console.error("Lỗi tải danh sách tỉnh:", err);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!isCompanyStaff) return;
+
+    const loadAssignedAreas = async () => {
+      try {
+        const res = await getAssignedSurveyAreas();
+        const list = Array.isArray(res?.data) ? res.data : [];
+
+        setAssignedAreas(list);
+        setStaffCompanyName(extractStaffCompanyName(list));
+
+        if (list.length > 0) {
+          setSelectedAssignedAreaId(String(list[0].id));
+        } else {
+          setSelectedAssignedAreaId("");
+        }
+      } catch (err) {
+        console.error("Lỗi tải vùng được giao:", err);
+        setAssignedAreas([]);
+        setSelectedAssignedAreaId("");
+      }
+    };
+
+    loadAssignedAreas();
+  }, [isCompanyStaff]);
+
+  const handleInitialLoaded = useCallback(
+    (mapInstance) => {
+      setInitialLoading(false);
+
+      if (mapInstance) {
+        mapRef.current = mapInstance;
+      }
+
+      if (selectedPolygon && mapInstance) {
+        try {
+          const layer = L.geoJSON(selectedPolygon);
+
+          mapInstance.fitBounds(layer.getBounds(), {
+            padding: [40, 40],
+          });
+        } catch (err) {
+          console.error("Lỗi fitBounds company polygon:", err);
+        }
+      }
+    },
+    [selectedPolygon]
+  );
 
   const handleVisibleCountChange = useCallback((count) => {
     setVisibleMapCount(count);
@@ -59,6 +173,7 @@ export default function HomePage() {
 
   const normalizeProvinceName = (name) => {
     if (!name) return "";
+
     return name
       .trim()
       .replace(/^TP\.?\s*/i, "Thành phố ")
@@ -69,16 +184,9 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    fetchProvinces()
-      .then(setProvinces)
-      .catch((err) => {
-        console.error("Lỗi tải danh sách tỉnh:", err);
-      });
-  }, []);
-
-  useEffect(() => {
     const normalized = normalizeProvinceName(province);
     const list = PROVINCE_DISTRICTS[normalized] || [];
+
     setDistricts(list);
     setDistrict("");
   }, [province]);
@@ -110,6 +218,7 @@ export default function HomePage() {
       return (
         <section className="panel-card">
           <div className="panel-title">Tài khoản</div>
+
           <div className="button-stack">
             <button
               className="btn btn-primary"
@@ -117,6 +226,7 @@ export default function HomePage() {
             >
               🔐 Đăng nhập
             </button>
+
             <button
               className="btn btn-secondary"
               onClick={() => (window.location.href = "/register")}
@@ -134,9 +244,11 @@ export default function HomePage() {
 
         <div className="user-card">
           <div className="user-avatar">👤</div>
+
           <div>
             <div className="user-label">Xin chào</div>
             <div className="user-name">{fullname}</div>
+
             <div
               style={{
                 marginTop: 4,
@@ -146,8 +258,21 @@ export default function HomePage() {
                 fontWeight: 600,
               }}
             >
-              Quyền: {role}
+              QUYỀN: {role}
             </div>
+
+            {isCompanyStaff && (
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 12,
+                  color: "#2563eb",
+                  fontWeight: 700,
+                }}
+              >
+                Công ty: {staffCompanyName || "Đang cập nhật"}
+              </div>
+            )}
           </div>
         </div>
 
@@ -158,6 +283,15 @@ export default function HomePage() {
               onClick={() => (window.location.href = "/admin")}
             >
               🛠 Trang quản trị
+            </button>
+          )}
+
+          {role === "company" && (
+            <button
+              className="btn btn-info"
+              onClick={() => (window.location.href = "/company-reports")}
+            >
+              📊 Báo cáo nhân viên
             </button>
           )}
 
@@ -172,19 +306,79 @@ export default function HomePage() {
     );
   };
 
+  const renderStaffAssignedSection = () => {
+    if (!isCompanyStaff) return null;
+
+    return (
+      <section className="panel-card">
+        <div className="panel-title">Vùng được giao</div>
+
+        {assignedAreas.length === 0 ? (
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 12,
+              background: "#fff7ed",
+              color: "#c2410c",
+              fontWeight: 700,
+              lineHeight: 1.5,
+            }}
+          >
+            Bạn chưa được công ty giao vùng khảo sát.
+          </div>
+        ) : (
+          <>
+            <div className="form-group">
+              <label>Chọn vùng khảo sát</label>
+
+              <select
+                value={selectedAssignedAreaId}
+                onChange={(e) => setSelectedAssignedAreaId(e.target.value)}
+                className="modern-input"
+              >
+                {assignedAreas.map((area) => (
+                  <option key={area.id} value={area.id}>
+                    {area.name || `Vùng #${area.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div
+              style={{
+                padding: 10,
+                borderRadius: 12,
+                background: "#ecfdf5",
+                color: "#047857",
+                fontWeight: 700,
+                lineHeight: 1.5,
+              }}
+            >
+              Nhân viên chỉ xem và khảo sát nhà thuốc trong vùng được giao.
+            </div>
+          </>
+        )}
+      </section>
+    );
+  };
+
   const renderFilterSection = () => {
+    if (isCompanyStaff) return null;
+
     return (
       <section className="panel-card">
         <div className="panel-title">Bộ lọc dữ liệu</div>
 
         <div className="form-group">
           <label>Tỉnh / Thành phố</label>
+
           <select
             value={province}
             onChange={(e) => setProvince(e.target.value)}
             className="modern-input"
           >
             <option value="">-- Tất cả --</option>
+
             {provinces.map((p) => (
               <option key={p} value={p}>
                 {p}
@@ -195,6 +389,7 @@ export default function HomePage() {
 
         <div className="form-group">
           <label>Địa chỉ hành chính cấp 2</label>
+
           <select
             value={district}
             onChange={(e) => setDistrict(e.target.value)}
@@ -202,6 +397,7 @@ export default function HomePage() {
             disabled={!districts.length}
           >
             <option value="">-- Tất cả --</option>
+
             {districts.map((d) => (
               <option key={d} value={d}>
                 {d}
@@ -212,6 +408,7 @@ export default function HomePage() {
 
         <div className="form-group">
           <label>Rating tối thiểu</label>
+
           <input
             type="number"
             value={ratingMin}
@@ -259,9 +456,9 @@ export default function HomePage() {
     return (
       <div className="panel-card content-card">
         <PharmacyList
-          province={province}
-          district={district}
-          ratingMin={ratingMin}
+          province={isCompanyStaff ? "" : province}
+          district={isCompanyStaff ? "" : district}
+          ratingMin={isCompanyStaff ? "" : ratingMin}
           userLocation={userLocation}
           setSelectedPharmacy={setSelectedPharmacy}
           setUserLocation={setUserLocation}
@@ -276,10 +473,16 @@ export default function HomePage() {
   return (
     <>
       {initialLoading && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 99999 }}>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 99999,
+          }}
+        >
           <LoadingScreen
             title="Pharmacy Map"
-            subtitle="Đang tải dữ liệu nhà thuốc, vui lòng chờ một chút..."
+            subtitle="Đang tải dữ liệu nhà thuốc..."
           />
         </div>
       )}
@@ -291,57 +494,40 @@ export default function HomePage() {
           pointerEvents: initialLoading ? "none" : "auto",
         }}
       >
-        <button
-          className="mobile-menu-btn"
-          onClick={() => setMenuOpen(true)}
-          aria-label="Mở menu"
-        >
-          ☰
-        </button>
-
-        {menuOpen && (
-          <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />
-        )}
-
         <aside className={`sidebar ${menuOpen ? "show" : ""}`}>
           <div className="sidebar-inner">
-            <div className="sidebar-top">
-              <button
-                className="sidebar-close-btn"
-                onClick={() => setMenuOpen(false)}
-                aria-label="Đóng menu"
-              >
-                ✕
-              </button>
+            <div className="brand-block">
+              <div className="brand-icon">💊</div>
 
-              <div className="brand-block">
-                <div className="brand-icon">💊</div>
-                <div>
-                  <h1 className="brand-title">Bản đồ nhà thuốc</h1>
-                  <p className="brand-subtitle">
-                    Quản lý, lọc và trực quan dữ liệu nhà thuốc
-                  </p>
-                </div>
+              <div>
+                <h1 className="brand-title">Bản đồ nhà thuốc</h1>
+
+                <p className="brand-subtitle">
+                  Quản lý, lọc và trực quan dữ liệu nhà thuốc
+                </p>
               </div>
             </div>
 
             {renderAccountSection()}
+            {renderStaffAssignedSection()}
             {renderFilterSection()}
             {renderAdvancedToolsSection()}
-            <section className="panel-content">{renderMainContent()}</section>
+            {renderMainContent()}
           </div>
         </aside>
 
         <main className="map-wrapper">
           <div className="map-frame">
             <MapView
-              province={province}
-              district={district}
-              ratingMin={ratingMin}
+              province={isCompanyStaff ? "" : province}
+              district={isCompanyStaff ? "" : district}
+              ratingMin={isCompanyStaff ? "" : ratingMin}
               selectedPharmacy={selectedPharmacy}
               userLocation={userLocation}
               radiusKm={radiusKm}
               showHeatmap={canUseAdvancedTools ? showHeatmap : false}
+              staffAssignedArea={selectedAssignedArea}
+              companySelectedPolygon={selectedPolygon}
               onInitialLoaded={handleInitialLoaded}
               onVisibleCountChange={handleVisibleCountChange}
               onFeaturesChange={handleFeaturesChange}
@@ -366,7 +552,9 @@ export default function HomePage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="logout-popup-icon">🚪</div>
+
             <h2 className="logout-popup-title">Xác nhận đăng xuất</h2>
+
             <p className="logout-popup-text">
               Bạn có chắc muốn đăng xuất khỏi hệ thống không?
             </p>

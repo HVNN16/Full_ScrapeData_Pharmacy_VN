@@ -491,8 +491,9 @@ export const updatePharmacy = async (req, res) => {
         owner_name = $10,
         is_surveyed = true,
         surveyed_at = NOW(),
-        surveyed_by = $11
-      WHERE id = $12
+        surveyed_by = $11,
+surveyed_company_id = $12
+WHERE id = $13
       RETURNING
         id,
         name,
@@ -508,26 +509,37 @@ export const updatePharmacy = async (req, res) => {
         is_surveyed,
         surveyed_at,
         surveyed_by,
+surveyed_company_id,
+${LAT_COL} AS lat,
         ${LAT_COL} AS lat,
         ${LNG_COL} AS lng;
     `;
 
-    const values = [
-      name || "",
-      address || "",
-      province || "",
-      district || "",
-      phone || "",
-      status || "",
-      rating === null || rating === undefined || rating === ""
-        ? null
-        : Number(rating),
-      image_url || "",
-      JSON.stringify(normalizedProducts),
-      owner_name || "",
-      req.user?.id || null,
-      Number(id),
-    ];
+    const surveyedBy = req.user?.id || null;
+const surveyedCompanyId =
+  req.user?.role === "company_staff"
+    ? req.user?.company_id || null
+    : req.user?.role === "company"
+    ? req.user?.id || null
+    : null;
+
+const values = [
+  name || "",
+  address || "",
+  province || "",
+  district || "",
+  phone || "",
+  status || "",
+  rating === null || rating === undefined || rating === ""
+    ? null
+    : Number(rating),
+  image_url || "",
+  JSON.stringify(normalizedProducts),
+  owner_name || "",
+  surveyedBy,
+  surveyedCompanyId,
+  Number(id),
+];
 
     const { rows } = await pool.query(sql, values);
 

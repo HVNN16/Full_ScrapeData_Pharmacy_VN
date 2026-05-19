@@ -13,6 +13,7 @@ import {
   Marker,
   Popup,
   FeatureGroup,
+  Polygon,
 } from "react-leaflet";
 import { EditControl } from "react-leaflet-draw";
 import {
@@ -25,6 +26,9 @@ import {
   getAdminSurveyAreasByUser,
   adminUpdateSurveyArea,
   adminDeleteSurveyArea,
+  getCompanyStaff,
+  createCompanyStaff,
+  assignSurveyAreaToStaff,
 } from "../api";
 import PharmacyMarkers from "./PharmacyMarkers";
 import "leaflet/dist/leaflet.css";
@@ -258,6 +262,8 @@ function MapView({
   userLocation,
   radiusKm,
   showHeatmap,
+  staffAssignedArea,
+  companySelectedPolygon,
   onInitialLoaded,
   onVisibleCountChange,
   onFeaturesChange,
@@ -276,6 +282,12 @@ function MapView({
   const [adminUsers, setAdminUsers] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState("");
 
+  const [companyStaff, setCompanyStaff] = useState([]);
+  const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [newStaffName, setNewStaffName] = useState("");
+  const [newStaffEmail, setNewStaffEmail] = useState("");
+  const [newStaffPassword, setNewStaffPassword] = useState("");
+
   const [showPanel, setShowPanel] = useState(false);
   const [toast, setToast] = useState(null);
   const [panelPos, setPanelPos] = useState({ x: 92, y: 14 });
@@ -291,19 +303,41 @@ function MapView({
 
   const role = localStorage.getItem("role");
   const isAdmin = role === "admin";
+  const isCompanyStaff = role === "company_staff";
   const canDrawArea = role === "company" || role === "admin";
 
+  const staffPolygonCoords = useMemo(() => {
+    if (!isCompanyStaff || !staffAssignedArea) return null;
+    return extractPolygonCoords(staffAssignedArea);
+  }, [isCompanyStaff, staffAssignedArea]);
+
+const companyPolygonCoords = useMemo(() => {
+  if (!companySelectedPolygon?.coordinates?.[0]) return null;
+
+  return companySelectedPolygon.coordinates[0]
+    .slice(0, -1)
+    .map((p) => [Number(p[0]), Number(p[1])])
+    .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
+}, [companySelectedPolygon]);
+
+const activePolygonCoords = isCompanyStaff
+  ? staffPolygonCoords
+  : companyPolygonCoords || polygonCoords;
   const isUsingPolygon =
-    Array.isArray(polygonCoords) && polygonCoords.length >= 3;
+    Array.isArray(activePolygonCoords) && activePolygonCoords.length >= 3;
 
   const polygonObject = useMemo(() => {
-    return coordsToPolygonObject(polygonCoords);
-  }, [polygonCoords]);
+    return coordsToPolygonObject(activePolygonCoords);
+  }, [activePolygonCoords]);
 
   const polygonParam = useMemo(() => {
     if (!polygonObject) return undefined;
     return JSON.stringify(polygonObject);
   }, [polygonObject]);
+
+  const staffPolygonLatLngs = useMemo(() => {
+    return coordsToLatLngs(staffPolygonCoords || []);
+  }, [staffPolygonCoords]);
 
   const showToast = useCallback((message, type = "info") => {
     setToast({ message, type });
@@ -350,6 +384,36 @@ function MapView({
 
     loadAdminUsers();
   }, [isAdmin, showToast]);
+
+  useEffect(() => {
+    if (role !== "company") return;
+
+    const loadCompanyStaff = async () => {
+      try {
+        const res = await getCompanyStaff();
+        setCompanyStaff(Array.isArray(res?.data) ? res.data : []);
+      } catch (err) {
+        console.error("Lỗi load nhân viên:", err);
+        showToast("Không tải được danh sách nhân viên", "error");
+      }
+    };
+
+    loadCompanyStaff();
+  }, [role, showToast]);
+
+  useEffect(() => {
+    if (!isCompanyStaff) return;
+
+    setFeatures(null);
+    onFeaturesChange?.([]);
+    onVisibleCountChange?.(0);
+    setReloadKey(Date.now());
+  }, [
+    isCompanyStaff,
+    staffAssignedArea,
+    onFeaturesChange,
+    onVisibleCountChange,
+  ]);
 
   const handleSelectUser = async (userId) => {
     setSelectedUserId(userId);
@@ -421,10 +485,19 @@ function MapView({
   }, [selectedPharmacy]);
 
   useEffect(() => {
+    if (isCompanyStaff) return;
+
     setFeatures(null);
     onFeaturesChange?.([]);
     onVisibleCountChange?.(0);
-  }, [province, district, ratingMin, onVisibleCountChange, onFeaturesChange]);
+  }, [
+    province,
+    district,
+    ratingMin,
+    isCompanyStaff,
+    onVisibleCountChange,
+    onFeaturesChange,
+  ]);
 
   const handleViewportChange = useCallback(({ bbox }) => {
     setBbox((prev) => (prev === bbox ? prev : bbox));
@@ -461,36 +534,35 @@ function MapView({
   }, [onFeaturesChange, onVisibleCountChange]);
 
   const handlePolygonCreated = useCallback(
-  (e) => {
-    // reset bộ lọc tỉnh/huyện khi vẽ polygon
-    window.dispatchEvent(new Event("resetMapFilters"));
+    (e) => {
+      window.dispatchEvent(new Event("resetMapFilters"));
 
-    const layer = e.layer;
-    const coords = getLayerCoords(layer);
+      const layer = e.layer;
+      const coords = getLayerCoords(layer);
 
-    if (coords.length < 3) {
-      showToast("Vùng khảo sát cần ít nhất 3 điểm", "error");
-      return;
-    }
+      if (coords.length < 3) {
+        showToast("Vùng khảo sát cần ít nhất 3 điểm", "error");
+        return;
+      }
 
-    if (featureGroupRef.current) {
-      featureGroupRef.current.clearLayers();
-      featureGroupRef.current.addLayer(layer);
-    }
+      if (featureGroupRef.current) {
+        featureGroupRef.current.clearLayers();
+        featureGroupRef.current.addLayer(layer);
+      }
 
-    setShowPanel(true);
-    setSelectedAreaId("");
-    setAreaName("");
-    setPolygonCoords([...coords]);
-    setFeatures(null);
-    onFeaturesChange?.([]);
-    onVisibleCountChange?.(0);
-    setReloadKey(Date.now());
+      setShowPanel(true);
+      setSelectedAreaId("");
+      setAreaName("");
+      setPolygonCoords([...coords]);
+      setFeatures(null);
+      onFeaturesChange?.([]);
+      onVisibleCountChange?.(0);
+      setReloadKey(Date.now());
 
-    showToast("Đã tạo vùng khảo sát", "success");
-  },
-  [showToast, onFeaturesChange, onVisibleCountChange]
-);
+      showToast("Đã tạo vùng khảo sát", "success");
+    },
+    [showToast, onFeaturesChange, onVisibleCountChange]
+  );
 
   const handlePolygonEdited = useCallback(
     async (e) => {
@@ -659,50 +731,103 @@ function MapView({
     }
   };
 
+  const handleCreateStaff = async () => {
+    const fullname = newStaffName.trim();
+    const email = newStaffEmail.trim();
+    const password = newStaffPassword.trim();
+
+    if (!fullname || !email || !password) {
+      showToast("Vui lòng nhập đầy đủ thông tin nhân viên", "error");
+      return;
+    }
+
+    try {
+      await createCompanyStaff({
+        fullname,
+        email,
+        password,
+      });
+
+      setNewStaffName("");
+      setNewStaffEmail("");
+      setNewStaffPassword("");
+
+      const res = await getCompanyStaff();
+      setCompanyStaff(Array.isArray(res?.data) ? res.data : []);
+
+      showToast("Đã tạo nhân viên thành công", "success");
+    } catch (err) {
+      console.error("Lỗi tạo nhân viên:", err);
+      showToast(
+        err?.response?.data?.message || "Tạo nhân viên thất bại",
+        "error"
+      );
+    }
+  };
+
+  const handleAssignAreaToStaff = async () => {
+    if (!selectedAreaId) {
+      showToast("Bạn chưa chọn vùng khảo sát", "error");
+      return;
+    }
+
+    if (!selectedStaffId) {
+      showToast("Bạn chưa chọn nhân viên", "error");
+      return;
+    }
+
+    try {
+      await assignSurveyAreaToStaff(selectedAreaId, selectedStaffId);
+      showToast("Đã giao vùng cho nhân viên", "success");
+    } catch (err) {
+      console.error("Lỗi giao vùng:", err);
+      showToast(err?.response?.data?.message || "Giao vùng thất bại", "error");
+    }
+  };
+
   useEffect(() => {
     let active = true;
 
     (async () => {
       try {
+        if (isCompanyStaff && !polygonParam) {
+          setFeatures(null);
+          onFeaturesChange?.([]);
+          onVisibleCountChange?.(0);
+
+          if (!hasReportedInitialLoad.current) {
+            hasReportedInitialLoad.current = true;
+            onInitialLoaded?.();
+          }
+
+          return;
+        }
+
         if (!bbox && !isUsingPolygon) return;
 
         if (active) {
           setLoading(true);
-          // setFeatures(null);
-          // onFeaturesChange?.([]);
-          // onVisibleCountChange?.(0);
         }
 
-        // const params = {
-        //   province,
-        //   district,
-        //   rating_min: ratingMin || 0,
-        // };
-
-        // if (isUsingPolygon && polygonParam) {
-        //   params.polygon = polygonParam;
-        // } else {
-        //   params.bbox = bbox;
-        // }
         const params = {
-  province,
-  district,
-  rating_min: ratingMin || 0,
-};
+          province: isCompanyStaff ? "" : province,
+          district: isCompanyStaff ? "" : district,
+          rating_min: isCompanyStaff ? 0 : ratingMin || 0,
+        };
 
-if (isUsingPolygon && polygonParam) {
-  params.polygon = polygonParam;
-  params.limit = 8000;
-} else {
-  params.bbox = bbox;
+        if (isUsingPolygon && polygonParam) {
+          params.polygon = polygonParam;
+          params.limit = isCompanyStaff ? 10000 : 8000;
+        } else {
+          params.bbox = bbox;
 
-  if (!province && !district && !ratingMin) {
-    params.mode = "overview";
-    params.limit = 20000;
-  } else {
-    params.limit = 20000;
-  }
-}
+          if (!province && !district && !ratingMin) {
+            params.mode = "overview";
+            params.limit = 20000;
+          } else {
+            params.limit = 20000;
+          }
+        }
 
         const data = await fetchGeoJSON(params);
 
@@ -751,6 +876,7 @@ if (isUsingPolygon && polygonParam) {
     reloadKey,
     isUsingPolygon,
     polygonParam,
+    isCompanyStaff,
     onInitialLoaded,
     onVisibleCountChange,
     onFeaturesChange,
@@ -951,7 +1077,7 @@ if (isUsingPolygon && polygonParam) {
               ))}
             </select>
 
-            {isUsingPolygon && (
+            {isUsingPolygon && !isCompanyStaff && (
               <>
                 <input
                   value={areaName}
@@ -980,6 +1106,121 @@ if (isUsingPolygon && polygonParam) {
                 >
                   📌 Đã chọn {polygonCoords.length} điểm
                 </div>
+
+                {role === "company" && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      marginBottom: 9,
+                      padding: 10,
+                      borderRadius: 12,
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                    }}
+                  >
+                    <div style={{ fontWeight: 900, marginBottom: 8 }}>
+                      👥 Nhân viên công ty
+                    </div>
+
+                    <input
+                      value={newStaffName}
+                      onChange={(e) => setNewStaffName(e.target.value)}
+                      placeholder="Tên nhân viên"
+                      style={{
+                        width: "100%",
+                        padding: 8,
+                        borderRadius: 9,
+                        border: "1px solid #d8e0ea",
+                        marginBottom: 7,
+                        boxSizing: "border-box",
+                      }}
+                    />
+
+                    <input
+                      value={newStaffEmail}
+                      onChange={(e) => setNewStaffEmail(e.target.value)}
+                      placeholder="Email nhân viên"
+                      style={{
+                        width: "100%",
+                        padding: 8,
+                        borderRadius: 9,
+                        border: "1px solid #d8e0ea",
+                        marginBottom: 7,
+                        boxSizing: "border-box",
+                      }}
+                    />
+
+                    <input
+                      type="password"
+                      value={newStaffPassword}
+                      onChange={(e) => setNewStaffPassword(e.target.value)}
+                      placeholder="Mật khẩu"
+                      style={{
+                        width: "100%",
+                        padding: 8,
+                        borderRadius: 9,
+                        border: "1px solid #d8e0ea",
+                        marginBottom: 7,
+                        boxSizing: "border-box",
+                      }}
+                    />
+
+                    <button
+                      className="survey-panel-btn"
+                      onClick={handleCreateStaff}
+                      style={{
+                        width: "100%",
+                        border: "none",
+                        borderRadius: 9,
+                        padding: 8,
+                        background: "#2563eb",
+                        color: "#fff",
+                        fontWeight: 800,
+                        cursor: "pointer",
+                        marginBottom: 9,
+                      }}
+                    >
+                      ➕ Tạo nhân viên
+                    </button>
+
+                    <select
+                      value={selectedStaffId}
+                      onChange={(e) => setSelectedStaffId(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: 8,
+                        borderRadius: 9,
+                        border: "1px solid #d8e0ea",
+                        marginBottom: 7,
+                      }}
+                    >
+                      <option value="">-- Chọn nhân viên để giao vùng --</option>
+                      {companyStaff.map((staff) => (
+                        <option key={staff.id} value={staff.id}>
+                          {staff.fullname} - {staff.email}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      className="survey-panel-btn"
+                      onClick={handleAssignAreaToStaff}
+                      disabled={!selectedAreaId}
+                      style={{
+                        width: "100%",
+                        border: "none",
+                        borderRadius: 9,
+                        padding: 8,
+                        background: selectedAreaId ? "#16a34a" : "#94a3b8",
+                        color: "#fff",
+                        fontWeight: 800,
+                        cursor: selectedAreaId ? "pointer" : "not-allowed",
+                      }}
+                    >
+                      📌 Giao vùng đang chọn
+                    </button>
+                  </div>
+                )}
 
                 {selectedAreaId && (
                   <div
@@ -1039,7 +1280,7 @@ if (isUsingPolygon && polygonParam) {
               </>
             )}
 
-            {selectedAreaId && (
+            {selectedAreaId && !isCompanyStaff && (
               <button
                 className="survey-panel-btn"
                 onClick={handleDeleteSavedArea}
@@ -1078,6 +1319,25 @@ if (isUsingPolygon && polygonParam) {
         </div>
       )}
 
+      {isCompanyStaff && !staffAssignedArea && (
+        <div
+          style={{
+            position: "absolute",
+            top: 14,
+            left: 14,
+            zIndex: 9999,
+            background: "#fff7ed",
+            color: "#c2410c",
+            padding: "10px 14px",
+            borderRadius: 12,
+            fontWeight: 800,
+            boxShadow: "0 8px 22px rgba(0,0,0,0.15)",
+          }}
+        >
+          Bạn chưa được giao vùng khảo sát
+        </div>
+      )}
+
       <MapContainer
         center={[16.05, 108.2]}
         zoom={6}
@@ -1085,7 +1345,7 @@ if (isUsingPolygon && polygonParam) {
       >
         <MapViewportWatcher
           onViewportChange={handleViewportChange}
-          disabled={isUsingPolygon}
+          disabled={isUsingPolygon || isCompanyStaff}
         />
 
         <TileLayer
@@ -1122,7 +1382,6 @@ if (isUsingPolygon && polygonParam) {
                     weight: 3,
                     fillColor: "#2563eb",
                     fillOpacity: 0.22,
-                    dashArray: "6,6",
                   },
                 },
                 circle: false,
@@ -1137,8 +1396,34 @@ if (isUsingPolygon && polygonParam) {
             />
           </FeatureGroup>
         )}
+{!isCompanyStaff &&
+  companyPolygonCoords &&
+  coordsToLatLngs(companyPolygonCoords).length >= 3 && (
+    <Polygon
+      positions={coordsToLatLngs(companyPolygonCoords)}
+      pathOptions={{
+        color: "#2563eb",
+        weight: 4,
+        fillColor: "#3b82f6",
+        fillOpacity: 0.18,
+        dashArray: "8,6",
+      }}
+    />
+  )}
+        {isCompanyStaff && staffPolygonLatLngs.length >= 3 && (
+          <Polygon
+            positions={staffPolygonLatLngs}
+            pathOptions={{
+              color: "#16a34a",
+              weight: 3,
+              fillColor: "#22c55e",
+              fillOpacity: 0.18,
+              dashArray: "6,6",
+            }}
+          />
+        )}
 
-        {isUsingPolygon && <FitToPolygon polygonCoords={polygonCoords} />}
+        {isUsingPolygon && <FitToPolygon polygonCoords={activePolygonCoords} />}
 
         <PharmacyMarkers
           features={features}
@@ -1161,7 +1446,7 @@ if (isUsingPolygon && polygonParam) {
           province={province}
           district={district}
           features={features}
-          disabled={isUsingPolygon}
+          disabled={isUsingPolygon || isCompanyStaff}
         />
 
         {userLocation && (

@@ -39,7 +39,7 @@ export const createSurveyArea = async (req, res) => {
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error("❌ Lỗi lưu vùng:", err);
-    res.status(500).json({ message: "server_error" });
+    res.status(500).json({ message: "server_error", error: err.message });
   }
 };
 
@@ -60,11 +60,10 @@ export const getMySurveyAreas = async (req, res) => {
     `;
 
     const { rows } = await pool.query(sql, [req.user.id]);
-
     res.json(rows);
   } catch (err) {
     console.error("❌ Lỗi lấy vùng:", err);
-    res.status(500).json({ message: "server_error" });
+    res.status(500).json({ message: "server_error", error: err.message });
   }
 };
 
@@ -91,7 +90,7 @@ export const updateSurveyArea = async (req, res) => {
         polygon = COALESCE($2, polygon),
         updated_at = NOW()
       WHERE id = $3
-      AND user_id = $4
+        AND user_id = $4
       RETURNING id, user_id, name, polygon, created_at, updated_at;
     `;
 
@@ -103,13 +102,15 @@ export const updateSurveyArea = async (req, res) => {
     ]);
 
     if (!rows.length) {
-      return res.status(404).json({ message: "Không tìm thấy vùng hoặc không có quyền sửa!" });
+      return res.status(404).json({
+        message: "Không tìm thấy vùng hoặc không có quyền sửa!",
+      });
     }
 
     res.json(rows[0]);
   } catch (err) {
     console.error("❌ Lỗi sửa vùng:", err);
-    res.status(500).json({ message: "server_error" });
+    res.status(500).json({ message: "server_error", error: err.message });
   }
 };
 
@@ -127,20 +128,197 @@ export const deleteSurveyArea = async (req, res) => {
     const sql = `
       DELETE FROM survey_areas
       WHERE id = $1
-      AND user_id = $2
+        AND user_id = $2
       RETURNING id;
     `;
 
     const { rows } = await pool.query(sql, [id, req.user.id]);
 
     if (!rows.length) {
-      return res.status(404).json({ message: "Không tìm thấy vùng hoặc không có quyền xoá!" });
+      return res.status(404).json({
+        message: "Không tìm thấy vùng hoặc không có quyền xoá!",
+      });
     }
 
     res.json({ message: "Đã xoá vùng!", id: rows[0].id });
   } catch (err) {
     console.error("❌ Lỗi xoá vùng:", err);
-    res.status(500).json({ message: "server_error" });
+    res.status(500).json({ message: "server_error", error: err.message });
+  }
+};
+
+/* =========================
+   COMPANY: ASSIGN AREA TO STAFF
+========================= */
+export const assignSurveyAreaToStaff = async (req, res) => {
+  try {
+    if (req.user.role !== "company") {
+      return res.status(403).json({
+        success: false,
+        message: "Chỉ company mới được giao vùng khảo sát!",
+      });
+    }
+
+    const areaId = Number(req.params.id);
+    const staffId = Number(req.body.staffId);
+
+    if (!areaId || !staffId) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu areaId hoặc staffId!",
+      });
+    }
+
+    const areaCheck = await pool.query(
+      `
+      SELECT id
+      FROM survey_areas
+      WHERE id = $1
+        AND user_id = $2
+      `,
+      [areaId, req.user.id]
+    );
+
+    if (areaCheck.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Vùng không tồn tại hoặc không thuộc công ty này!",
+      });
+    }
+
+    const staffCheck = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE id = $1
+        AND role = 'company_staff'
+        AND company_id = $2
+      `,
+      [staffId, req.user.id]
+    );
+
+    if (staffCheck.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Nhân viên không tồn tại hoặc không thuộc công ty này!",
+      });
+    }
+
+    const { rows } = await pool.query(
+      `
+      INSERT INTO survey_area_assignments (
+        survey_area_id,
+        staff_id,
+        company_id
+      )
+      VALUES ($1, $2, $3)
+      ON CONFLICT (survey_area_id, staff_id)
+      DO UPDATE SET assigned_at = NOW()
+      RETURNING id, survey_area_id, staff_id, company_id, assigned_at;
+      `,
+      [areaId, staffId, req.user.id]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Giao vùng thành công!",
+      assignment: rows[0],
+    });
+  } catch (err) {
+    console.error("❌ Lỗi giao vùng:", err);
+    res.status(500).json({
+      success: false,
+      message: "server_error",
+      error: err.message,
+    });
+  }
+};
+
+/* =========================
+   COMPANY / STAFF: GET ASSIGNED AREAS
+========================= */
+export const getAssignedSurveyAreasForStaff = async (req, res) => {
+  try {
+    if (!["company", "company_staff"].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Không có quyền xem vùng được giao!",
+      });
+    }
+
+    let sql;
+    let params;
+
+    if (req.user.role === "company_staff") {
+  sql = `
+    SELECT 
+      saa.id AS assignment_id,
+      saa.assigned_at,
+
+      sa.id,
+      sa.user_id,
+      sa.name,
+      sa.polygon,
+      sa.created_at,
+      sa.updated_at,
+
+      c.id AS company_id,
+      c.fullname AS company_name,
+      c.email AS company_email
+
+    FROM survey_area_assignments saa
+
+    JOIN survey_areas sa
+      ON sa.id = saa.survey_area_id
+
+    JOIN users c
+      ON c.id = saa.company_id
+
+    WHERE saa.staff_id = $1
+
+    ORDER BY saa.assigned_at DESC;
+  `;
+
+  params = [req.user.id];
+} else {
+  sql = `
+    SELECT 
+      saa.id AS assignment_id,
+      saa.assigned_at,
+
+      sa.id,
+      sa.user_id,
+      sa.name,
+      sa.polygon,
+      sa.created_at,
+      sa.updated_at
+
+    FROM survey_area_assignments saa
+
+    JOIN survey_areas sa
+      ON sa.id = saa.survey_area_id
+
+    WHERE saa.company_id = $1
+
+    ORDER BY saa.assigned_at DESC;
+  `;
+
+  params = [req.user.id];
+}
+
+    const { rows } = await pool.query(sql, params);
+
+    res.json({
+      success: true,
+      data: rows,
+    });
+  } catch (err) {
+    console.error("❌ Lỗi lấy vùng được giao:", err);
+    res.status(500).json({
+      success: false,
+      message: "server_error",
+      error: err.message,
+    });
   }
 };
 
@@ -150,7 +328,9 @@ export const deleteSurveyArea = async (req, res) => {
 export const adminGetSurveyUsers = async (req, res) => {
   try {
     if (!isAdmin(req.user.role)) {
-      return res.status(403).json({ message: "Chỉ admin mới được xem danh sách user!" });
+      return res.status(403).json({
+        message: "Chỉ admin mới được xem danh sách user!",
+      });
     }
 
     const sql = `
@@ -168,11 +348,10 @@ export const adminGetSurveyUsers = async (req, res) => {
     `;
 
     const { rows } = await pool.query(sql);
-
     res.json(rows);
   } catch (err) {
     console.error("❌ Lỗi admin lấy user vùng khảo sát:", err);
-    res.status(500).json({ message: "server_error" });
+    res.status(500).json({ message: "server_error", error: err.message });
   }
 };
 
@@ -182,7 +361,9 @@ export const adminGetSurveyUsers = async (req, res) => {
 export const adminGetSurveyAreasByUser = async (req, res) => {
   try {
     if (!isAdmin(req.user.role)) {
-      return res.status(403).json({ message: "Chỉ admin mới được xem vùng của user!" });
+      return res.status(403).json({
+        message: "Chỉ admin mới được xem vùng của user!",
+      });
     }
 
     const { userId } = req.params;
@@ -205,11 +386,10 @@ export const adminGetSurveyAreasByUser = async (req, res) => {
     `;
 
     const { rows } = await pool.query(sql, [userId]);
-
     res.json(rows);
   } catch (err) {
     console.error("❌ Lỗi admin lấy vùng theo user:", err);
-    res.status(500).json({ message: "server_error" });
+    res.status(500).json({ message: "server_error", error: err.message });
   }
 };
 
@@ -219,7 +399,9 @@ export const adminGetSurveyAreasByUser = async (req, res) => {
 export const adminUpdateSurveyArea = async (req, res) => {
   try {
     if (!isAdmin(req.user.role)) {
-      return res.status(403).json({ message: "Chỉ admin mới được sửa vùng này!" });
+      return res.status(403).json({
+        message: "Chỉ admin mới được sửa vùng này!",
+      });
     }
 
     const { id } = req.params;
@@ -252,7 +434,7 @@ export const adminUpdateSurveyArea = async (req, res) => {
     res.json(rows[0]);
   } catch (err) {
     console.error("❌ Lỗi admin sửa vùng:", err);
-    res.status(500).json({ message: "server_error" });
+    res.status(500).json({ message: "server_error", error: err.message });
   }
 };
 
@@ -262,7 +444,9 @@ export const adminUpdateSurveyArea = async (req, res) => {
 export const adminDeleteSurveyArea = async (req, res) => {
   try {
     if (!isAdmin(req.user.role)) {
-      return res.status(403).json({ message: "Chỉ admin mới được xoá vùng này!" });
+      return res.status(403).json({
+        message: "Chỉ admin mới được xoá vùng này!",
+      });
     }
 
     const { id } = req.params;
@@ -282,6 +466,6 @@ export const adminDeleteSurveyArea = async (req, res) => {
     res.json({ message: "Admin đã xoá vùng!", id: rows[0].id });
   } catch (err) {
     console.error("❌ Lỗi admin xoá vùng:", err);
-    res.status(500).json({ message: "server_error" });
+    res.status(500).json({ message: "server_error", error: err.message });
   }
 };
