@@ -123,15 +123,20 @@ const rowsToGeoJSON = (rows) => {
         address: row.address || "",
         province: row.province || "",
         district: row.district || "",
+        ward: row.ward || "",
+        street_address: row.street_address || "",
         phone: row.phone || "",
         status: row.status || "",
         rating: row.rating === null ? null : Number(row.rating),
         image_url: row.image_url || "",
         product_groups: row.product_groups || [],
         owner_name: row.owner_name || "",
+        business_type: row.business_type || "",
+        survey_note: row.survey_note || "",
         is_surveyed: row.is_surveyed || false,
         surveyed_at: row.surveyed_at || null,
         surveyed_by: row.surveyed_by || null,
+        surveyed_company_id: row.surveyed_company_id || null,
       },
     }));
 
@@ -229,6 +234,8 @@ export const getPharmaciesGeoJSON = async (req, res) => {
           OR LOWER(address) LIKE LOWER($${index})
           OR LOWER(province) LIKE LOWER($${index})
           OR LOWER(district) LIKE LOWER($${index})
+          OR LOWER(ward) LIKE LOWER($${index})
+          OR LOWER(street_address) LIKE LOWER($${index})
         )
       `;
 
@@ -258,15 +265,20 @@ export const getPharmaciesGeoJSON = async (req, res) => {
         address,
         province,
         district,
+        ward,
+        street_address,
         phone,
         status,
         rating,
         COALESCE(image_url, image) AS image_url,
         product_groups,
         owner_name,
+        business_type,
+        survey_note,
         is_surveyed,
         surveyed_at,
         surveyed_by,
+        surveyed_company_id,
         ${LAT_COL} AS lat,
         ${LNG_COL} AS lng
       FROM ${tableSource}
@@ -323,15 +335,20 @@ export const getPharmaciesList = async (req, res) => {
         address,
         province,
         district,
+        ward,
+        street_address,
         phone,
         status,
         rating,
         COALESCE(image_url, image) AS image_url,
         product_groups,
         owner_name,
+        business_type,
+        survey_note,
         is_surveyed,
         surveyed_at,
         surveyed_by,
+        surveyed_company_id,
         ${LAT_COL} AS lat,
         ${LNG_COL} AS lng
       FROM ${TABLE_NAME}
@@ -348,6 +365,8 @@ export const getPharmaciesList = async (req, res) => {
           OR LOWER(address) LIKE LOWER($${index})
           OR LOWER(province) LIKE LOWER($${index})
           OR LOWER(district) LIKE LOWER($${index})
+          OR LOWER(ward) LIKE LOWER($${index})
+          OR LOWER(street_address) LIKE LOWER($${index})
         )
       `;
       values.push(`%${search}%`);
@@ -374,12 +393,18 @@ export const getPharmaciesList = async (req, res) => {
 
     const { rows } = await pool.query(sql, values);
 
-    res.json(rows.map((row) => ({
-      ...row,
-      rating: row.rating === null ? null : Number(row.rating),
-      product_groups: row.product_groups || [],
-      owner_name: row.owner_name || "",
-    })));
+    res.json(
+      rows.map((row) => ({
+        ...row,
+        rating: row.rating === null ? null : Number(row.rating),
+        product_groups: row.product_groups || [],
+        owner_name: row.owner_name || "",
+        ward: row.ward || "",
+        street_address: row.street_address || "",
+        business_type: row.business_type || "",
+        survey_note: row.survey_note || "",
+      }))
+    );
   } catch (err) {
     console.error("❌ Lỗi getPharmaciesList:", err);
 
@@ -459,12 +484,16 @@ export const updatePharmacy = async (req, res) => {
       address,
       province,
       district,
+      ward,
+      street_address,
       phone,
       status,
       rating,
       image_url,
       product_groups,
       owner_name,
+      business_type,
+      survey_note,
     } = req.body;
 
     if (!id || Number.isNaN(Number(id))) {
@@ -475,6 +504,15 @@ export const updatePharmacy = async (req, res) => {
 
     const normalizedProducts = normalizeProductGroups(product_groups);
 
+    const surveyedBy = req.user?.id || null;
+
+    const surveyedCompanyId =
+      req.user?.role === "company_staff"
+        ? req.user?.company_id || null
+        : req.user?.role === "company"
+        ? req.user?.id || null
+        : null;
+
     const sql = `
       UPDATE ${TABLE_NAME}
       SET
@@ -482,64 +520,69 @@ export const updatePharmacy = async (req, res) => {
         address = $2,
         province = $3,
         district = $4,
-        phone = $5,
-        status = $6,
-        rating = $7,
-        image_url = $8,
-        image = $8,
-        product_groups = $9,
-        owner_name = $10,
+        ward = $5,
+        street_address = $6,
+        phone = $7,
+        status = $8,
+        rating = $9,
+        image_url = $10,
+        image = $10,
+        product_groups = $11,
+        owner_name = $12,
+        business_type = $13,
+        survey_note = $14,
         is_surveyed = true,
         surveyed_at = NOW(),
-        surveyed_by = $11,
-surveyed_company_id = $12
-WHERE id = $13
+        surveyed_by = $15,
+        surveyed_company_id = $16,
+        updated_at = NOW()
+      WHERE id = $17
       RETURNING
         id,
         name,
         address,
         province,
         district,
+        ward,
+        street_address,
         phone,
         status,
         rating,
         COALESCE(image_url, image) AS image_url,
         product_groups,
         owner_name,
+        business_type,
+        survey_note,
         is_surveyed,
         surveyed_at,
         surveyed_by,
-surveyed_company_id,
-${LAT_COL} AS lat,
+        surveyed_company_id,
+        updated_at,
         ${LAT_COL} AS lat,
         ${LNG_COL} AS lng;
     `;
 
-    const surveyedBy = req.user?.id || null;
-const surveyedCompanyId =
-  req.user?.role === "company_staff"
-    ? req.user?.company_id || null
-    : req.user?.role === "company"
-    ? req.user?.id || null
-    : null;
-
-const values = [
-  name || "",
-  address || "",
-  province || "",
-  district || "",
-  phone || "",
-  status || "",
-  rating === null || rating === undefined || rating === ""
-    ? null
-    : Number(rating),
-  image_url || "",
-  JSON.stringify(normalizedProducts),
-  owner_name || "",
-  surveyedBy,
-  surveyedCompanyId,
-  Number(id),
-];
+    const values = [
+      name || "",
+      address || "",
+      province || "",
+      district || "",
+      ward || "",
+      street_address || "",
+      phone || "",
+      status || "",
+      rating === null || rating === undefined || rating === ""
+        ? null
+        : Number(rating),
+      image_url || "",
+      JSON.stringify(normalizedProducts),
+      owner_name || "",
+      business_type || "",
+      survey_note || "",
+      surveyedBy,
+      surveyedCompanyId,
+      Number(id),
+    ];
 
     const { rows } = await pool.query(sql, values);
 
