@@ -265,6 +265,8 @@ function MapView({
   staffAssignedArea,
   companySelectedPolygon,
   onInitialLoaded,
+  nearbyMode,
+nearbyFeatures,
   onVisibleCountChange,
   onFeaturesChange,
 }) {
@@ -803,7 +805,8 @@ const activePolygonCoords = isCompanyStaff
           return;
         }
 
-        if (!bbox && !isUsingPolygon) return;
+        // if (!bbox && !isUsingPolygon) return;
+        if (!bbox && !isUsingPolygon && !nearbyMode) return;
 
         if (active) {
           setLoading(true);
@@ -836,10 +839,67 @@ const activePolygonCoords = isCompanyStaff
         const nextFeatures = Array.isArray(data?.features)
           ? data.features
           : [];
+        
+        let finalFeatures = nextFeatures;
 
-        setFeatures(data);
+if (
+  nearbyMode &&
+  userLocation &&
+  radiusKm > 0
+) {
+  const distanceKm = (lat1, lon1, lat2, lon2) => {
+    const R = 6371;
+
+    const dLat =
+      ((lat2 - lat1) * Math.PI) / 180;
+
+    const dLon =
+      ((lon2 - lon1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) ** 2;
+
+    return (
+      R *
+      2 *
+      Math.atan2(
+        Math.sqrt(a),
+        Math.sqrt(1 - a)
+      )
+    );
+  };
+
+  finalFeatures = nextFeatures.filter((f) => {
+    const coords =
+      f?.geometry?.coordinates || [];
+
+    const lon = Number(coords[0]);
+    const lat = Number(coords[1]);
+
+    if (!lat || !lon) return false;
+
+    const d = distanceKm(
+      userLocation.lat,
+      userLocation.lon,
+      lat,
+      lon
+    );
+
+    return d <= radiusKm;
+  });
+}
+
+        // setFeatures(data);
+        setFeatures({
+  ...data,
+  features: finalFeatures,
+});
         onFeaturesChange?.(nextFeatures);
-        onVisibleCountChange?.(nextFeatures.length);
+        // onVisibleCountChange?.(nextFeatures.length);
+        onVisibleCountChange?.(finalFeatures.length);
 
         if (!hasReportedInitialLoad.current) {
           hasReportedInitialLoad.current = true;
@@ -868,20 +928,23 @@ const activePolygonCoords = isCompanyStaff
     return () => {
       active = false;
     };
-  }, [
-    province,
-    district,
-    ratingMin,
-    bbox,
-    reloadKey,
-    isUsingPolygon,
-    polygonParam,
-    isCompanyStaff,
-    onInitialLoaded,
-    onVisibleCountChange,
-    onFeaturesChange,
-    showToast,
-  ]);
+}, [
+  province,
+  district,
+  ratingMin,
+  bbox,
+  reloadKey,
+  isUsingPolygon,
+  polygonParam,
+  isCompanyStaff,
+  nearbyMode,
+  radiusKm,
+  userLocation,
+  onInitialLoaded,
+  onVisibleCountChange,
+  onFeaturesChange,
+  showToast,
+]);
 
   return (
     <div style={{ position: "relative", height: "100%" }}>
@@ -1343,10 +1406,19 @@ const activePolygonCoords = isCompanyStaff
         zoom={6}
         style={{ height: "100%", width: "100%" }}
       >
-        <MapViewportWatcher
+        {/* <MapViewportWatcher
           onViewportChange={handleViewportChange}
           disabled={isUsingPolygon || isCompanyStaff}
-        />
+        /> */}
+
+        <MapViewportWatcher
+  onViewportChange={handleViewportChange}
+  disabled={
+    isUsingPolygon ||
+    isCompanyStaff ||
+    nearbyMode
+  }
+/>
 
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
@@ -1426,13 +1498,25 @@ const activePolygonCoords = isCompanyStaff
         {isUsingPolygon && <FitToPolygon polygonCoords={activePolygonCoords} />}
 
         <PharmacyMarkers
-          features={features}
+  features={
+    nearbyMode
+      ? {
+          type: "FeatureCollection",
+          features: nearbyFeatures,
+        }
+      : features
+  }
           selectedPharmacy={selectedPharmacy}
           activeRouteTarget={routeTarget}
           onRequestRoute={setRouteTarget}
         />
 
-        <HeatLayer features={features?.features || []} enabled={showHeatmap} />
+        <HeatLayer
+  features={
+    nearbyMode
+      ? nearbyFeatures
+      : features?.features || []
+  } enabled={showHeatmap} />
 
         <RouteToPharmacy
           userLocation={userLocation}

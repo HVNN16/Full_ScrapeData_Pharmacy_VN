@@ -1,9 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 function PharmacyList({
   province,
   district,
   ratingMin,
+  nearbyMode,
+  setNearbyMode,
+  setNearbyFeatures,
   setSelectedPharmacy,
   userLocation,
   setUserLocation,
@@ -14,7 +17,6 @@ function PharmacyList({
   const [search, setSearch] = useState("");
   const [radius, setRadius] = useState(3);
   const [sortByDistance, setSortByDistance] = useState(true);
-  const [nearbyMode, setNearbyMode] = useState(false);
 
   const distanceKm = (lat1, lon1, lat2, lon2) => {
     const R = 6371;
@@ -30,6 +32,21 @@ function PharmacyList({
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
+  const buildNearbyFeatures = useCallback(() => {
+    if (!userLocation || !Array.isArray(features)) return [];
+
+    return features.filter((feature) => {
+      const coords = feature?.geometry?.coordinates || [];
+      const lon = Number(coords[0]);
+      const lat = Number(coords[1]);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+
+      const d = distanceKm(userLocation.lat, userLocation.lon, lat, lon);
+      return d <= radius;
+    });
+  }, [features, userLocation, radius]);
+
   const items = useMemo(() => {
     if (!Array.isArray(features)) return [];
 
@@ -43,14 +60,20 @@ function PharmacyList({
 
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
 
+        const distance =
+          userLocation && nearbyMode
+            ? distanceKm(userLocation.lat, userLocation.lon, lat, lon)
+            : null;
+
         return {
           ...props,
           lat,
           lon,
+          distance,
         };
       })
       .filter(Boolean);
-  }, [features]);
+  }, [features, userLocation, nearbyMode]);
 
   const searchedItems = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -73,36 +96,43 @@ function PharmacyList({
   }, [items, search]);
 
   const filtered = useMemo(() => {
-    if (!nearbyMode || !userLocation) return searchedItems;
+    let result = searchedItems;
 
-    const withDistance = searchedItems.map((item) => {
-      const d = distanceKm(
-        userLocation.lat,
-        userLocation.lon,
-        Number(item.lat),
-        Number(item.lon)
+    if (nearbyMode && userLocation) {
+      result = searchedItems.filter(
+        (item) => typeof item.distance === "number" && item.distance <= radius
       );
+    }
 
-      return {
-        ...item,
-        distance: d,
-      };
-    });
+    if (nearbyMode && sortByDistance) {
+      return [...result].sort((a, b) => a.distance - b.distance);
+    }
 
-    const nearby = withDistance.filter((item) => item.distance <= radius);
-
-    if (!sortByDistance) return nearby;
-
-    return [...nearby].sort((a, b) => a.distance - b.distance);
+    return result;
   }, [searchedItems, nearbyMode, userLocation, radius, sortByDistance]);
 
   useEffect(() => {
     setNearbyMode(false);
-  }, [province, district, ratingMin, features]);
+    setNearbyFeatures([]);
+  }, [province, district, ratingMin, setNearbyMode, setNearbyFeatures]);
+
+  useEffect(() => {
+    if (!nearbyMode) return;
+
+    setRadiusKm(radius);
+    setNearbyFeatures(buildNearbyFeatures());
+  }, [
+    radius,
+    nearbyMode,
+    buildNearbyFeatures,
+    setRadiusKm,
+    setNearbyFeatures,
+  ]);
 
   useEffect(() => {
     if (filtered.length === 1) {
       const only = filtered[0];
+
       setSelectedPharmacy({
         lat: Number(only.lat),
         lon: Number(only.lon),
@@ -146,7 +176,7 @@ function PharmacyList({
 
   const handleFilterNearby = () => {
     if (!userLocation) {
-      alert("⚠️ Vui lòng nhấn '📍 Lấy vị trí' trước!");
+      alert("⚠️ Vui lòng nhấn '📍 Lấy vị trí hiện tại' trước!");
       return;
     }
 
@@ -157,10 +187,12 @@ function PharmacyList({
 
     setRadiusKm(radius);
     setNearbyMode(true);
+    setNearbyFeatures(buildNearbyFeatures());
   };
 
   const handleClearNearby = () => {
     setNearbyMode(false);
+    setNearbyFeatures([]);
   };
 
   const quickRadiusOptions = [1, 3, 5, 10];

@@ -47,6 +47,8 @@ export default function HomePage() {
 
   const [userLocation, setUserLocation] = useState(null);
   const [radiusKm, setRadiusKm] = useState(5);
+  const [nearbyMode, setNearbyMode] = useState(false);
+  const [nearbyFeatures, setNearbyFeatures] = useState([]);
 
   const [menuOpen] = useState(false);
   const mapRef = useRef(null);
@@ -456,16 +458,19 @@ export default function HomePage() {
     return (
       <div className="panel-card content-card">
         <PharmacyList
-          province={isCompanyStaff ? "" : province}
-          district={isCompanyStaff ? "" : district}
-          ratingMin={isCompanyStaff ? "" : ratingMin}
-          userLocation={userLocation}
-          setSelectedPharmacy={setSelectedPharmacy}
-          setUserLocation={setUserLocation}
-          setRadiusKm={setRadiusKm}
-          visibleMapCount={visibleMapCount}
-          features={visibleFeatures}
-        />
+  province={isCompanyStaff ? "" : province}
+  district={isCompanyStaff ? "" : district}
+  ratingMin={isCompanyStaff ? "" : ratingMin}
+  nearbyMode={nearbyMode}
+  setNearbyMode={setNearbyMode}
+  setNearbyFeatures={setNearbyFeatures}
+  userLocation={userLocation}
+  setSelectedPharmacy={setSelectedPharmacy}
+  setUserLocation={setUserLocation}
+  setRadiusKm={setRadiusKm}
+  visibleMapCount={visibleMapCount}
+  features={visibleFeatures}
+/>
       </div>
     );
   };
@@ -519,19 +524,21 @@ export default function HomePage() {
         <main className="map-wrapper">
           <div className="map-frame">
             <MapView
-              province={isCompanyStaff ? "" : province}
-              district={isCompanyStaff ? "" : district}
-              ratingMin={isCompanyStaff ? "" : ratingMin}
-              selectedPharmacy={selectedPharmacy}
-              userLocation={userLocation}
-              radiusKm={radiusKm}
-              showHeatmap={canUseAdvancedTools ? showHeatmap : false}
-              staffAssignedArea={selectedAssignedArea}
-              companySelectedPolygon={selectedPolygon}
-              onInitialLoaded={handleInitialLoaded}
-              onVisibleCountChange={handleVisibleCountChange}
-              onFeaturesChange={handleFeaturesChange}
-            />
+  province={isCompanyStaff ? "" : province}
+  district={isCompanyStaff ? "" : district}
+  ratingMin={isCompanyStaff ? "" : ratingMin}
+  selectedPharmacy={selectedPharmacy}
+  userLocation={userLocation}
+  radiusKm={radiusKm}
+  nearbyMode={nearbyMode}
+  nearbyFeatures={nearbyFeatures}
+  showHeatmap={canUseAdvancedTools ? showHeatmap : false}
+  staffAssignedArea={selectedAssignedArea}
+  companySelectedPolygon={selectedPolygon}
+  onInitialLoaded={handleInitialLoaded}
+  onVisibleCountChange={handleVisibleCountChange}
+  onFeaturesChange={handleFeaturesChange}
+/>
           </div>
 
           {(role === "admin" || role === "company") && (
