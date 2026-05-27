@@ -6,7 +6,7 @@ const LAT_COL = "latitude";
 const LNG_COL = "longitude";
 
 const DEFAULT_LIMIT = 10000;
-const MAX_LIMIT = 20000;
+const MAX_LIMIT = 40000;
 
 const parseLimit = (value) => {
   const n = parseInt(value, 10);
@@ -296,6 +296,9 @@ export const getPharmaciesGeoJSON = async (req, res) => {
     }
 
     const { rows } = await pool.query(sql, values);
+
+console.log("🏥 Đang lấy:", rows.length, "nhà thuốc");
+    // const { rows } = await pool.query(sql, values);
 
     const finalRows = isPolygonMode
       ? rows

@@ -44,7 +44,7 @@ export default function HomePage() {
 
   const [showStats, setShowStats] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
-
+const [heatmapWarning, setHeatmapWarning] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [radiusKm, setRadiusKm] = useState(5);
   const [nearbyMode, setNearbyMode] = useState(false);
@@ -205,10 +205,22 @@ export default function HomePage() {
     window.location.href = "/";
   }, []);
 
+  // const handleToggleHeatmap = () => {
+  //   if (!canUseAdvancedTools) return;
+  //   setShowHeatmap((prev) => !prev);
+  // };
+
   const handleToggleHeatmap = () => {
-    if (!canUseAdvancedTools) return;
-    setShowHeatmap((prev) => !prev);
-  };
+  if (!canUseAdvancedTools) return;
+
+  if (!province && !nearbyMode) {
+    setHeatmapWarning(true);
+    return;
+  }
+
+  setShowHeatmap((prev) => !prev);
+};
+
 
   const handleToggleStats = () => {
     if (!canUseAdvancedTools) return;
@@ -379,7 +391,9 @@ export default function HomePage() {
             onChange={(e) => setProvince(e.target.value)}
             className="modern-input"
           >
-            <option value="">-- Tất cả --</option>
+            {/* <option value="">-- Tất cả --</option> */}
+            <option value="">-- Chọn tỉnh/thành --</option>
+{/* <option value="__ALL__">🌍 Tất cả dữ liệu</option> */}
 
             {provinces.map((p) => (
               <option key={p} value={p}>
@@ -449,9 +463,16 @@ export default function HomePage() {
   const renderMainContent = () => {
     if (showStats && canUseAdvancedTools) {
       return (
-        <div className="panel-card content-card">
-          <ProvinceStats province={province} />
-        </div>
+        <div
+  className="panel-card content-card"
+  style={{
+    maxHeight: "calc(100vh - 120px)",
+    overflowY: "auto",
+    overflowX: "hidden",
+  }}
+>
+  <ProvinceStats province={province} />
+</div>
       );
     }
 
@@ -548,7 +569,100 @@ export default function HomePage() {
           )}
         </main>
       </div>
+{heatmapWarning && (
+  <div
+    onClick={() => setHeatmapWarning(false)}
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(15,23,42,0.45)",
+      backdropFilter: "blur(4px)",
+      zIndex: 99999,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 16,
+      animation: "fadeIn 0.2s ease",
+    }}
+  >
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        width: 380,
+        maxWidth: "100%",
+        background: "#fff",
+        borderRadius: 24,
+        overflow: "hidden",
+        boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+        animation: "popupIn 0.25s ease",
+      }}
+    >
+      <div
+        style={{
+          background: "linear-gradient(135deg,#f59e0b,#f97316)",
+          padding: "20px 18px",
+          color: "#fff",
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 42,
+            marginBottom: 10,
+          }}
+        >
+          🔥
+        </div>
 
+        <div
+          style={{
+            fontSize: 20,
+            fontWeight: 900,
+          }}
+        >
+          Chưa chọn khu vực
+        </div>
+      </div>
+
+      <div
+        style={{
+          padding: 22,
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 14,
+            color: "#475569",
+            lineHeight: 1.7,
+            marginBottom: 22,
+          }}
+        >
+          Để hiển thị lớp nhiệt chính xác và tối ưu hiệu năng,
+          vui lòng chọn <b>Tỉnh / Thành phố</b> trước khi bật Heatmap.
+        </div>
+
+        <button
+          onClick={() => setHeatmapWarning(false)}
+          style={{
+            width: "100%",
+            border: "none",
+            borderRadius: 14,
+            padding: "12px 16px",
+            background: "linear-gradient(135deg,#f59e0b,#f97316)",
+            color: "#fff",
+            fontWeight: 900,
+            fontSize: 15,
+            cursor: "pointer",
+            boxShadow: "0 10px 25px rgba(249,115,22,0.3)",
+          }}
+        >
+          Đã hiểu
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {showLogoutPopup && (
         <div
           className="logout-popup-overlay"

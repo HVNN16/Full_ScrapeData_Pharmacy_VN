@@ -8,6 +8,7 @@ import React, {
 import {
   MapContainer,
   TileLayer,
+  LayersControl,
   useMap,
   Circle,
   Marker,
@@ -16,6 +17,7 @@ import {
   Polygon,
 } from "react-leaflet";
 import { EditControl } from "react-leaflet-draw";
+
 import {
   fetchGeoJSON,
   createSurveyArea,
@@ -806,17 +808,41 @@ const activePolygonCoords = isCompanyStaff
         }
 
         // if (!bbox && !isUsingPolygon) return;
-        if (!bbox && !isUsingPolygon && !nearbyMode) return;
+        // if (!bbox && !isUsingPolygon && !nearbyMode) return;
+        const hasFilter =
+  province ||
+  district ||
+  nearbyMode ||
+  isUsingPolygon;
+
+if (!hasFilter) {
+  setFeatures(null);
+  onFeaturesChange?.([]);
+  onVisibleCountChange?.(0);
+
+  if (!hasReportedInitialLoad.current) {
+    hasReportedInitialLoad.current = true;
+    onInitialLoaded?.();
+  }
+
+  return;
+}
 
         if (active) {
           setLoading(true);
         }
+const isAllDataMode = province === "__ALL__";
 
-        const params = {
-          province: isCompanyStaff ? "" : province,
-          district: isCompanyStaff ? "" : district,
-          rating_min: isCompanyStaff ? 0 : ratingMin || 0,
-        };
+const params = {
+  province: isCompanyStaff || isAllDataMode ? "" : province,
+  district: isCompanyStaff || isAllDataMode ? "" : district,
+  rating_min: isCompanyStaff ? 0 : ratingMin || 0,
+};
+        // const params = {
+        //   province: isCompanyStaff ? "" : province,
+        //   district: isCompanyStaff ? "" : district,
+        //   rating_min: isCompanyStaff ? 0 : ratingMin || 0,
+        // };
 
         if (isUsingPolygon && polygonParam) {
           params.polygon = polygonParam;
@@ -826,10 +852,12 @@ const activePolygonCoords = isCompanyStaff
 
           if (!province && !district && !ratingMin) {
             params.mode = "overview";
-            params.limit = 20000;
+            params.limit = 40000;
           } else {
-            params.limit = 20000;
+            params.limit = 40000;
           }
+          console.log("📦 LIMIT gửi lên API:", params.limit);
+console.log("🗺️ MODE:", params.mode);
         }
 
         const data = await fetchGeoJSON(params);
@@ -1420,10 +1448,51 @@ if (
   }
 />
 
-        <TileLayer
+        {/* <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        /> */}
+        <LayersControl position="bottomleft">
+
+  {/* ===== Bản đồ thường ===== */}
+  <LayersControl.BaseLayer checked name="Bản đồ thường">
+    <TileLayer
+      attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
+      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      maxZoom={19}
+    />
+  </LayersControl.BaseLayer>
+
+  {/* ===== OSM đẹp hơn ===== */}
+  <LayersControl.BaseLayer name="OSM Humanitarian">
+    <TileLayer
+      attribution='&copy; OpenStreetMap contributors'
+      url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
+      maxZoom={19}
+    />
+  </LayersControl.BaseLayer>
+
+  {/* ===== Google Hybrid (đẹp nhất) ===== */}
+  <LayersControl.BaseLayer name="Google Hybrid">
+    <TileLayer
+      attribution='&copy; Google'
+      url="https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
+      subdomains={["mt0", "mt1", "mt2", "mt3"]}
+      maxZoom={20}
+    />
+  </LayersControl.BaseLayer>
+
+
+  {/* ===== Dark Mode ===== */}
+  <LayersControl.BaseLayer name="Dark Mode">
+    <TileLayer
+      attribution='&copy; CartoDB'
+      url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+      maxZoom={20}
+    />
+  </LayersControl.BaseLayer>
+
+</LayersControl>
 
         {canDrawArea && (
           <FeatureGroup
@@ -1530,7 +1599,7 @@ if (
           province={province}
           district={district}
           features={features}
-          disabled={isUsingPolygon || isCompanyStaff}
+          disabled={isUsingPolygon || isCompanyStaff || nearbyMode}
         />
 
         {userLocation && (
