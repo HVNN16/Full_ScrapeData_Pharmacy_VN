@@ -294,6 +294,7 @@ nearbyFeatures,
 
   const [showPanel, setShowPanel] = useState(false);
   const [toast, setToast] = useState(null);
+  const [showGuidePopup, setShowGuidePopup] = useState(false);
   const [panelPos, setPanelPos] = useState({ x: 92, y: 14 });
 
   const dragRef = useRef({
@@ -323,7 +324,16 @@ const companyPolygonCoords = useMemo(() => {
     .map((p) => [Number(p[0]), Number(p[1])])
     .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat));
 }, [companySelectedPolygon]);
+useEffect(() => {
+  const seen = localStorage.getItem("seenGuidePopup");
 
+  if (!seen) {
+    setTimeout(() => {
+      setShowGuidePopup(true);
+    }, 800);
+  }
+}, []);
+<div style={{ position: "relative", height: "100%" }}></div>
 const activePolygonCoords = isCompanyStaff
   ? staffPolygonCoords
   : companyPolygonCoords || polygonCoords;
@@ -1537,6 +1547,98 @@ if (
             />
           </FeatureGroup>
         )}
+        {showGuidePopup && (
+  <div
+    style={{
+      position: "absolute",
+      inset: 0,
+      background: "rgba(15,23,42,0.45)",
+      zIndex: 20000,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      backdropFilter: "blur(4px)",
+    }}
+  >
+    <div
+      style={{
+        width: 430,
+        maxWidth: "92%",
+        background: "#fff",
+        borderRadius: 24,
+        padding: 28,
+        boxShadow: "0 25px 60px rgba(0,0,0,0.35)",
+        textAlign: "center",
+        animation: "surveyPanelIn 0.3s ease",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 56,
+          marginBottom: 12,
+        }}
+      >
+        🗺️
+      </div>
+
+      <h2
+        style={{
+          margin: 0,
+          marginBottom: 14,
+          color: "#1e3a8a",
+          fontSize: 26,
+        }}
+      >
+        Chào mừng đến với Pharmacy Map
+      </h2>
+
+      <p
+        style={{
+          color: "#475569",
+          lineHeight: 1.7,
+          fontSize: 15,
+          marginBottom: 22,
+        }}
+      >
+        Vui lòng chọn bộ lọc tỉnh/thành hoặc sử dụng công cụ
+        vẽ polygon trên bản đồ để hiển thị và phân tích dữ liệu
+        nhà thuốc theo khu vực mong muốn.
+      </p>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+        }}
+      >
+        <button
+          onClick={() => {
+            localStorage.setItem(
+              "seenGuidePopup",
+              "true"
+            );
+
+            setShowGuidePopup(false);
+          }}
+          style={{
+            flex: 1,
+            border: "none",
+            padding: "13px",
+            borderRadius: 14,
+            background:
+              "linear-gradient(135deg,#2563eb,#7c3aed)",
+            color: "#fff",
+            fontWeight: 800,
+            cursor: "pointer",
+            fontSize: 15,
+          }}
+        >
+          Đã hiểu
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 {!isCompanyStaff &&
   companyPolygonCoords &&
   coordsToLatLngs(companyPolygonCoords).length >= 3 && (
