@@ -7,6 +7,8 @@ import {
   getCompanySurveyedPharmacies,
 } from "../api";
 
+const isMobileView = () => window.innerWidth <= 768;
+
 const btnBase = {
   border: "none",
   borderRadius: 14,
@@ -22,6 +24,7 @@ const cardStyle = {
   padding: 18,
   boxShadow: "0 14px 34px rgba(15,23,42,0.08)",
   border: "1px solid #e2e8f0",
+  overflow: "hidden",
 };
 
 const formatDate = (value) => {
@@ -42,6 +45,13 @@ export default function CompanyReportPanel() {
   const [selectedStaffId, setSelectedStaffId] = useState("all");
   const [selectedStaffName, setSelectedStaffName] = useState("Tất cả nhân viên");
   const [error, setError] = useState("");
+  const [isMobile, setIsMobile] = useState(isMobileView());
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(isMobileView());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const totalSurveyed = useMemo(
     () => summary.reduce((sum, item) => sum + Number(item.surveyed_total || 0), 0),
@@ -60,6 +70,15 @@ export default function CompanyReportPanel() {
         0
       ),
     [summary]
+  );
+
+  const totalAssignedPharmacies = useMemo(
+    () =>
+      assignments.reduce(
+        (sum, item) => sum + Number(item.total_pharmacies_in_area || 0),
+        0
+      ),
+    [assignments]
   );
 
   const loadAll = async () => {
@@ -137,21 +156,33 @@ export default function CompanyReportPanel() {
     <div
       style={{
         minHeight: "100vh",
+        width: "100%",
+        maxWidth: "100vw",
+        overflowX: "hidden",
         background: "linear-gradient(135deg,#f8fbff 0%,#eef4ff 100%)",
-        padding: 24,
+        padding: isMobile ? 12 : 24,
+        boxSizing: "border-box",
       }}
     >
       <div
         style={{
           maxWidth: 1600,
+          width: "100%",
           margin: "0 auto",
           display: "grid",
           gap: 16,
+          minWidth: 0,
         }}
       >
-        <Header onReload={loadAll} />
+        <Header onReload={loadAll} isMobile={isMobile} />
 
-        <div style={cardStyle}>
+        <div
+          style={{
+            ...cardStyle,
+            padding: isMobile ? 14 : 18,
+            borderRadius: isMobile ? 18 : 22,
+          }}
+        >
           {error && (
             <div
               style={{
@@ -185,40 +216,44 @@ export default function CompanyReportPanel() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))",
+              gridTemplateColumns: isMobile
+                ? "1fr 1fr"
+                : "repeat(auto-fit,minmax(200px,1fr))",
               gap: 12,
               marginBottom: 16,
             }}
           >
-            <StatBox icon="👥" label="Nhân viên" value={summary.length} />
-            <StatBox icon="🧭" label="Vùng đã giao" value={assignments.length} />
-<StatBox
-  icon="💊"
-  label="Nhà thuốc được giao"
-  value={assignments.reduce(
-    (sum, item) =>
-      sum + Number(item.total_pharmacies_in_area || 0),
-    0
-  )}
-/>            <StatBox icon="✅" label="Đã khảo sát" value={totalSurveyed} />
+            <StatBox icon="👥" label="Nhân viên" value={summary.length} isMobile={isMobile} />
+            <StatBox icon="🧭" label="Vùng đã giao" value={assignments.length} isMobile={isMobile} />
+            <StatBox icon="💊" label="Nhà thuốc được giao" value={totalAssignedPharmacies} isMobile={isMobile} />
+            <StatBox icon="✅" label="Đã khảo sát" value={totalSurveyed} isMobile={isMobile} />
             <StatBox
               icon="📅"
               label="Hôm nay"
               value={totalToday}
               sub={`Tháng này: ${totalThisMonth}`}
+              isMobile={isMobile}
             />
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <TabButton active={tab === "summary"} onClick={() => setTab("summary")}>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              overflowX: isMobile ? "auto" : "visible",
+              flexWrap: isMobile ? "nowrap" : "wrap",
+              paddingBottom: isMobile ? 6 : 0,
+            }}
+          >
+            <TabButton active={tab === "summary"} onClick={() => setTab("summary")} isMobile={isMobile}>
               👥 Nhân viên
             </TabButton>
 
-            <TabButton active={tab === "assignments"} onClick={() => setTab("assignments")}>
+            <TabButton active={tab === "assignments"} onClick={() => setTab("assignments")} isMobile={isMobile}>
               🧭 Vùng giao
             </TabButton>
 
-            <TabButton active={tab === "pharmacies"} onClick={handleViewAllPharmacies}>
+            <TabButton active={tab === "pharmacies"} onClick={handleViewAllPharmacies} isMobile={isMobile}>
               💊 Nhà thuốc khảo sát
             </TabButton>
 
@@ -228,7 +263,9 @@ export default function CompanyReportPanel() {
                 ...btnBase,
                 background: "linear-gradient(135deg,#16a34a,#22c55e)",
                 color: "#fff",
-                marginLeft: "auto",
+                marginLeft: isMobile ? 0 : "auto",
+                minWidth: isMobile ? 190 : "auto",
+                flexShrink: 0,
                 boxShadow: "0 10px 22px rgba(22,163,74,0.2)",
               }}
             >
@@ -238,8 +275,8 @@ export default function CompanyReportPanel() {
         </div>
 
         {tab === "summary" && (
-          <SectionCard title="👥 Thống kê theo nhân viên">
-            <Table>
+          <SectionCard title="👥 Thống kê theo nhân viên" isMobile={isMobile}>
+            <Table minWidth={isMobile ? 820 : 900}>
               <thead>
                 <tr>
                   <Th>Nhân viên</Th>
@@ -302,11 +339,11 @@ export default function CompanyReportPanel() {
         )}
 
         {tab === "assignments" && (
-          <SectionCard title="🧭 Vùng nào đang giao cho nhân viên nào">
+          <SectionCard title="🧭 Vùng nào đang giao cho nhân viên nào" isMobile={isMobile}>
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
+                gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit,minmax(280px,1fr))",
                 gap: 12,
               }}
             >
@@ -319,6 +356,7 @@ export default function CompanyReportPanel() {
                     border: "1px solid #e2e8f0",
                     background: "linear-gradient(135deg,#ffffff,#f8fafc)",
                     boxShadow: "0 10px 24px rgba(15,23,42,0.05)",
+                    minWidth: 0,
                   }}
                 >
                   <div style={{ fontWeight: 900, color: "#0f172a", fontSize: 16 }}>
@@ -334,45 +372,39 @@ export default function CompanyReportPanel() {
                   </div>
 
                   <div style={{ display: "grid", gap: 6, marginTop: 10 }}>
-  <Badge>💊 Tổng nhà thuốc: {item.total_pharmacies_in_area || 0}</Badge>
-  <Badge>✅ Đã khảo sát: {item.surveyed_count || 0}</Badge>
-  <Badge>⏳ Còn lại: {item.remaining_count || 0}</Badge>
-</div>
+                    <Badge>💊 Tổng nhà thuốc: {item.total_pharmacies_in_area || 0}</Badge>
+                    <Badge>✅ Đã khảo sát: {item.surveyed_count || 0}</Badge>
+                    <Badge>⏳ Còn lại: {item.remaining_count || 0}</Badge>
+                  </div>
 
                   <div style={{ marginTop: 8, color: "#64748b", fontSize: 12 }}>
                     Giao lúc: {formatDate(item.assigned_at)}
                   </div>
-                  <div
-  style={{
-    display: "flex",
-    gap: 8,
-    marginTop: 14,
-  }}
->
-  <button
-    onClick={() => {
-      localStorage.setItem(
-        "company_selected_area",
-        JSON.stringify(item)
-      );
 
-      window.location.href = "/";
-    }}
-    style={{
-      border: "none",
-      borderRadius: 12,
-      padding: "10px 14px",
-      background:
-        "linear-gradient(135deg,#2563eb,#3b82f6)",
-      color: "#fff",
-      fontWeight: 800,
-      cursor: "pointer",
-      width: "100%",
-    }}
-  >
-    🗺️ Xem trên bản đồ
-  </button>
-</div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                    <button
+                      onClick={() => {
+                        localStorage.setItem(
+                          "company_selected_area",
+                          JSON.stringify(item)
+                        );
+
+                        window.location.href = "/";
+                      }}
+                      style={{
+                        border: "none",
+                        borderRadius: 12,
+                        padding: "10px 14px",
+                        background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+                        color: "#fff",
+                        fontWeight: 800,
+                        cursor: "pointer",
+                        width: "100%",
+                      }}
+                    >
+                      🗺️ Xem trên bản đồ
+                    </button>
+                  </div>
                 </div>
               ))}
 
@@ -388,6 +420,7 @@ export default function CompanyReportPanel() {
         {tab === "pharmacies" && (
           <SectionCard
             title={`💊 Nhà thuốc đã khảo sát - ${selectedStaffName}`}
+            isMobile={isMobile}
             right={
               <button
                 onClick={() => handleExport(selectedStaffId)}
@@ -395,6 +428,7 @@ export default function CompanyReportPanel() {
                   ...btnBase,
                   background: "linear-gradient(135deg,#16a34a,#22c55e)",
                   color: "#fff",
+                  width: isMobile ? "100%" : "auto",
                 }}
               >
                 📥 Xuất CSV
@@ -405,7 +439,7 @@ export default function CompanyReportPanel() {
               Tổng: <b>{pharmacies.length}</b> nhà thuốc
             </div>
 
-            <Table maxHeight={520}>
+            <Table maxHeight={520} minWidth={isMobile ? 950 : 1000}>
               <thead>
                 <tr>
                   <Th>Nhà thuốc</Th>
@@ -468,51 +502,74 @@ export default function CompanyReportPanel() {
   );
 }
 
-function Header({ onReload }) {
+function Header({ onReload, isMobile }) {
   return (
     <div
       style={{
-        background: "rgba(255,255,255,0.78)",
+        background: "rgba(255,255,255,0.9)",
         backdropFilter: "blur(14px)",
         border: "1px solid #e2e8f0",
-        borderRadius: 26,
-        padding: 20,
+        borderRadius: isMobile ? 20 : 26,
+        padding: isMobile ? 14 : 20,
         boxShadow: "0 14px 34px rgba(15,23,42,0.08)",
         display: "flex",
+        flexDirection: isMobile ? "column" : "row",
         justifyContent: "space-between",
-        alignItems: "center",
-        gap: 16,
-        flexWrap: "wrap",
+        alignItems: isMobile ? "flex-start" : "center",
+        gap: 14,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          minWidth: 0,
+        }}
+      >
         <div
           style={{
-            width: 64,
-            height: 64,
-            borderRadius: 20,
+            width: isMobile ? 48 : 64,
+            height: isMobile ? 48 : 64,
+            minWidth: isMobile ? 48 : 64,
+            borderRadius: 18,
             display: "grid",
             placeItems: "center",
             background: "linear-gradient(135deg,#2563eb,#7c3aed)",
             color: "#fff",
-            fontSize: 28,
+            fontSize: isMobile ? 22 : 28,
             boxShadow: "0 14px 28px rgba(37,99,235,0.25)",
           }}
         >
           💊
         </div>
 
-        <div>
-          <div style={{ fontSize: 30, fontWeight: 900, color: "#1d4ed8" }}>
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: isMobile ? 21 : 30,
+              fontWeight: 900,
+              color: "#1d4ed8",
+              lineHeight: 1.2,
+              wordBreak: "break-word",
+            }}
+          >
             Pharmacy Company Dashboard
           </div>
-          <div style={{ marginTop: 4, color: "#64748b", fontSize: 14 }}>
+          <div style={{ marginTop: 4, color: "#64748b", fontSize: isMobile ? 12 : 14 }}>
             Quản lý vùng giao, nhân viên khảo sát và báo cáo doanh nghiệp
           </div>
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr 1fr" : "auto auto",
+          gap: 10,
+          width: isMobile ? "100%" : "auto",
+        }}
+      >
         <button
           onClick={() => (window.location.href = "/")}
           style={{
@@ -520,9 +577,10 @@ function Header({ onReload }) {
             background: "linear-gradient(135deg,#2563eb,#3b82f6)",
             color: "#fff",
             boxShadow: "0 10px 22px rgba(37,99,235,0.18)",
+            minWidth: 0,
           }}
         >
-          ← Quay về bản đồ
+          ← Bản đồ
         </button>
 
         <button
@@ -531,6 +589,7 @@ function Header({ onReload }) {
             ...btnBase,
             background: "linear-gradient(135deg,#0ea5e9,#38bdf8)",
             color: "#fff",
+            minWidth: 0,
           }}
         >
           🔄 Tải lại
@@ -540,21 +599,30 @@ function Header({ onReload }) {
   );
 }
 
-function StatBox({ icon, label, value, sub }) {
+function StatBox({ icon, label, value, sub, isMobile }) {
   return (
     <div
       style={{
         borderRadius: 18,
-        padding: 16,
+        padding: isMobile ? 12 : 16,
         background: "linear-gradient(135deg,#f8fafc,#ffffff)",
         border: "1px solid #e2e8f0",
         boxShadow: "0 10px 22px rgba(15,23,42,0.04)",
+        minWidth: 0,
       }}
     >
-      <div style={{ color: "#64748b", fontSize: 13, fontWeight: 800 }}>
+      <div style={{ color: "#64748b", fontSize: isMobile ? 11 : 13, fontWeight: 800 }}>
         {icon} {label}
       </div>
-      <div style={{ color: "#0f172a", fontSize: 30, fontWeight: 900, marginTop: 6 }}>
+      <div
+        style={{
+          color: "#0f172a",
+          fontSize: isMobile ? 22 : 30,
+          fontWeight: 900,
+          marginTop: 6,
+          wordBreak: "break-word",
+        }}
+      >
         {value}
       </div>
       {sub && <div style={{ color: "#64748b", fontSize: 12 }}>{sub}</div>}
@@ -562,19 +630,33 @@ function StatBox({ icon, label, value, sub }) {
   );
 }
 
-function SectionCard({ title, children, right }) {
+function SectionCard({ title, children, right, isMobile }) {
   return (
-    <div style={cardStyle}>
+    <div
+      style={{
+        ...cardStyle,
+        padding: isMobile ? 14 : 18,
+        borderRadius: isMobile ? 18 : 22,
+      }}
+    >
       <div
         style={{
           display: "flex",
+          flexDirection: isMobile ? "column" : "row",
           justifyContent: "space-between",
           gap: 12,
-          alignItems: "center",
+          alignItems: isMobile ? "flex-start" : "center",
           marginBottom: 14,
         }}
       >
-        <div style={{ fontWeight: 900, color: "#0f172a", fontSize: 18 }}>
+        <div
+          style={{
+            fontWeight: 900,
+            color: "#0f172a",
+            fontSize: isMobile ? 16 : 18,
+            lineHeight: 1.35,
+          }}
+        >
           {title}
         </div>
         {right}
@@ -584,7 +666,7 @@ function SectionCard({ title, children, right }) {
   );
 }
 
-function TabButton({ active, onClick, children }) {
+function TabButton({ active, onClick, children, isMobile }) {
   return (
     <button
       onClick={onClick}
@@ -594,7 +676,9 @@ function TabButton({ active, onClick, children }) {
           ? "linear-gradient(135deg,#2563eb,#3b82f6)"
           : "#f1f5f9",
         color: active ? "#fff" : "#334155",
-        minHeight: 48,
+        minHeight: 46,
+        minWidth: isMobile ? 150 : "auto",
+        flexShrink: 0,
         boxShadow: active ? "0 10px 20px rgba(37,99,235,0.18)" : "none",
       }}
     >
@@ -603,12 +687,21 @@ function TabButton({ active, onClick, children }) {
   );
 }
 
-function Table({ children, maxHeight }) {
+function Table({ children, maxHeight, minWidth = 900 }) {
   return (
-    <div style={{ overflowX: "auto", maxHeight, overflowY: maxHeight ? "auto" : "visible" }}>
+    <div
+      style={{
+        width: "100%",
+        overflowX: "auto",
+        maxHeight,
+        overflowY: maxHeight ? "auto" : "visible",
+        WebkitOverflowScrolling: "touch",
+      }}
+    >
       <table
         style={{
           width: "100%",
+          minWidth,
           borderCollapse: "separate",
           borderSpacing: 0,
           fontSize: 13,
@@ -651,6 +744,7 @@ function Td({ children, colSpan }) {
         verticalAlign: "top",
         borderBottom: "1px solid #e2e8f0",
         background: "#fff",
+        whiteSpace: "nowrap",
       }}
     >
       {children}
@@ -669,6 +763,7 @@ function Badge({ children }) {
         color: "#15803d",
         fontWeight: 900,
         fontSize: 12,
+        whiteSpace: "nowrap",
       }}
     >
       {children}
@@ -688,6 +783,7 @@ function SmallButton({ children, onClick, bg, color }) {
         color,
         fontWeight: 900,
         cursor: "pointer",
+        whiteSpace: "nowrap",
       }}
     >
       {children}
@@ -703,6 +799,7 @@ function Avatar({ name }) {
       style={{
         width: 34,
         height: 34,
+        minWidth: 34,
         borderRadius: "50%",
         display: "grid",
         placeItems: "center",

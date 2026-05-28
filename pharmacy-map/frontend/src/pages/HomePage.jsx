@@ -50,7 +50,7 @@ const [heatmapWarning, setHeatmapWarning] = useState(false);
   const [nearbyMode, setNearbyMode] = useState(false);
   const [nearbyFeatures, setNearbyFeatures] = useState([]);
 
-  const [menuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const mapRef = useRef(null);
 
   const [assignedAreas, setAssignedAreas] = useState([]);
@@ -512,7 +512,12 @@ const [heatmapWarning, setHeatmapWarning] = useState(false);
           />
         </div>
       )}
-
+      <button
+  className="mobile-menu-btn"
+  onClick={() => setMenuOpen(true)}
+>
+  ☰
+</button>
       <div
         className="home-layout"
         style={{
@@ -521,6 +526,12 @@ const [heatmapWarning, setHeatmapWarning] = useState(false);
         }}
       >
         <aside className={`sidebar ${menuOpen ? "show" : ""}`}>
+          <button
+  className="mobile-close-btn"
+  onClick={() => setMenuOpen(false)}
+>
+  ✕
+</button>
           <div className="sidebar-inner">
             <div className="brand-block">
               <div className="brand-icon">💊</div>
@@ -541,7 +552,12 @@ const [heatmapWarning, setHeatmapWarning] = useState(false);
             {renderMainContent()}
           </div>
         </aside>
-
+        {menuOpen && (
+  <div
+    className="mobile-overlay"
+    onClick={() => setMenuOpen(false)}
+  />
+)}
         <main className="map-wrapper">
           <div className="map-frame">
             <MapView
